@@ -10,6 +10,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -18,12 +19,21 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Install MAUI iOS workload
-        run: dotnet workload install ios maui-ios --skip-sign-check
+      # MauiApp targets both net9.0-android AND net9.0-ios
+      # so the restore step needs BOTH workloads even when
+      # we only publish for iOS.
+      - name: Install MAUI workloads (iOS + Android)
+        run: |
+          dotnet workload install ios android maui-ios maui-android \
+            --skip-sign-check
 
-      - name: Restore
-        run: dotnet restore MauiApp/MauiApp.csproj
+      # Restore only the iOS target to skip Android SDK download
+      - name: Restore (iOS only)
+        run: |
+          dotnet restore MauiApp/MauiApp.csproj \
+            -p:TargetFramework=net9.0-ios
 
+      # Build unsigned IPA for real iOS device (arm64)
       - name: Build iOS IPA
         run: |
           dotnet publish MauiApp/MauiApp.csproj \
@@ -36,16 +46,21 @@ jobs:
             -p:CodesignProvision="" \
             -o ./ios-output
 
-      - name: Find IPA
-        run: find . -name "*.ipa" -o -name "*.app" | head -20
+      - name: Find built IPA
+        run: |
+          echo "=== Searching for IPA files ==="
+          find . -name "*.ipa" 2>/dev/null || echo "No IPA found"
+          echo "=== Searching for .app bundles ==="
+          find . -name "*.app" -maxdepth 8 2>/dev/null | head -10
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: SpOneHR-iOS-v${{ github.run_number }}
           path: |
+            ios-output/*.ipa
             ios-output/**/*.ipa
+            MauiApp/bin/Release/net9.0-ios/ios-arm64/publish/*.ipa
             MauiApp/bin/Release/net9.0-ios/**/*.ipa
-            ios-output/**/*.app
           if-no-files-found: warn
           retention-days: 30

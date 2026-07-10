@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -18,11 +19,18 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Install MAUI Android workload
-        run: dotnet workload install android maui-android --skip-sign-check
+      # MauiApp targets both android and ios — install both workloads
+      # so restore does not fail on the iOS TargetFramework declaration
+      - name: Install MAUI workloads (Android + iOS stubs)
+        run: |
+          dotnet workload install android ios maui-android maui-ios \
+            --skip-sign-check
 
-      - name: Restore
-        run: dotnet restore MauiApp/MauiApp.csproj
+      # Restore only Android target — skip iOS download on Linux
+      - name: Restore (Android only)
+        run: |
+          dotnet restore MauiApp/MauiApp.csproj \
+            -p:TargetFramework=net9.0-android
 
       - name: Build Android APK
         run: |
@@ -32,7 +40,7 @@ jobs:
             -o ./android-output
 
       - name: Find APK
-        run: find . -name "*.apk" | head -10
+        run: find . -name "*.apk" 2>/dev/null | head -10
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
