@@ -46,28 +46,27 @@ jobs:
           dotnet restore MauiApp/MauiApp.csproj \
             -p:TargetFramework=net9.0-ios
 
-      - name: Build iOS IPA
+      - name: Build iOS App
         run: |
           dotnet publish MauiApp/MauiApp.csproj \
             -f net9.0-ios \
             -c Release \
             -r ios-arm64 \
-            -p:BuildIpa=true \
+            -p:BuildIpa=false \
             -p:EnableCodeSigning=false \
             -p:CodesignKey="" \
             -p:CodesignProvision="" \
             -o ./ios-output
 
-      - name: Find IPA
-        run: find . -name "*.ipa" 2>/dev/null || echo "No IPA found"
+      - name: Find App bundle
+        run: find . -name "*.app" -type d 2>/dev/null || echo "No .app found"
 
-      - name: Upload IPA
+      - name: Upload iOS App
         uses: actions/upload-artifact@v4
         with:
           name: SpOneHR-iOS-v${{ github.run_number }}
           path: |
-            ios-output/*.ipa
-            ios-output/**/*.ipa
-            MauiApp/bin/Release/net9.0-ios/**/*.ipa
+            ios-output/**/*.app
+            MauiApp/bin/Release/net9.0-ios/ios-arm64/**/*.app
           if-no-files-found: warn
           retention-days: 30

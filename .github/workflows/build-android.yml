@@ -9,25 +9,21 @@ jobs:
   build-android:
     runs-on: ubuntu-22.04
 
-    # Docker container with ONLY .NET 9 — no .NET 10 conflict possible.
-    # mcr.microsoft.com/dotnet/sdk:9.0 ships with the latest .NET 9 patch
-    # (currently 9.0.315). global.json latestFeature rollforward accepts it.
-    container:
-      image: mcr.microsoft.com/dotnet/sdk:9.0
-
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
       - name: Verify .NET version (must be 9.x)
         run: dotnet --version
 
-      # Install full MAUI workload — includes maui-android which is needed
-      # even for a pure Android build because MauiApp.csproj has UseMaui=true.
-      # Linux containers support the android portion of the maui workload.
       - name: Install MAUI Android workload
-        run: dotnet workload install android maui-android --skip-sign-check
+        run: dotnet workload install android maui-android --skip-sign-check --skip-manifest-update
 
       - name: Restore Android only
         run: |
@@ -39,7 +35,8 @@ jobs:
           dotnet publish MauiApp/MauiApp.csproj \
             -f net9.0-android \
             -c Release \
-            -o ./android-output
+            -o ./android-output \
+            -p:AndroidKeyStore=false
 
       - name: Find APK
         run: find . -name "*.apk" 2>/dev/null | head -10
@@ -51,4 +48,5 @@ jobs:
           path: |
             android-output/*.apk
             MauiApp/bin/Release/net9.0-android/*.apk
+          if-no-files-found: warn
           retention-days: 30
