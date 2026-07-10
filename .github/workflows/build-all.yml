@@ -54,25 +54,21 @@ jobs:
       - name: Install MAUI iOS workload
         run: dotnet workload install maui --skip-manifest-update --skip-sign-check
 
-      - name: Build iOS App
+      - name: Build iOS App (Simulator)
         run: |
           dotnet publish MauiApp/MauiApp.csproj \
             -f net9.0-ios \
+            -r iossimulator-x64 \
             -c Release \
-            -r ios-arm64 \
-            -p:BuildIpa=false \
-            -p:EnableCodeSigning=false \
-            -p:CodesignKey="" \
-            -p:CodesignProvision="" \
             -o ./ios-output
 
-      - name: Upload iOS App
+      - name: Upload iOS Simulator App
         uses: actions/upload-artifact@v4
         with:
           name: SpOneHR-iOS-${{ github.run_number }}
           path: |
             ios-output/**/*.app
-            MauiApp/bin/Release/net9.0-ios/ios-arm64/**/*.app
+            MauiApp/bin/Release/net9.0-ios/iossimulator-x64/**/*.app
           if-no-files-found: warn
           retention-days: 30
 

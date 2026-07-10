@@ -17,10 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install latest .NET 9 patch (9.0.x). The bundled workload manifest in
-      # the latest 9.0 SDK is compatible with MAUI 9.0.60 (9.0.300 feature band).
-      # Pinning to 9.0.1xx caused an SDK band mismatch: that band only knows MAUI
-      # up to ~9.0.10, so restoring 9.0.60 packages broke MSBuild targets.
+      # Use latest .NET 9 patch — its bundled workload manifest matches MAUI 9.0.60.
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
@@ -31,11 +28,8 @@ jobs:
           dotnet --version
           xcodebuild -version
 
-      # Install full MAUI workload — satisfies BOTH maui-ios AND maui-android.
-      # MAUI projects always need maui-android even when building iOS only.
-      # --skip-manifest-update: uses the manifest bundled with the installed SDK
-      # (iOS 18.x workload) instead of downloading the latest (iOS 26.5.9002
-      # which needs Xcode 26.5 — not available on this runner).
+      # --skip-manifest-update: use the manifest bundled with the installed SDK
+      # instead of downloading a newer one that may require a newer Xcode.
       - name: Install MAUI workload
         run: |
           dotnet workload install maui \
@@ -47,27 +41,27 @@ jobs:
           dotnet restore MauiApp/MauiApp.csproj \
             -p:TargetFramework=net9.0-ios
 
-      - name: Build iOS App
+      # Build for iOS Simulator (iossimulator-x64) — no Apple code-signing
+      # certificates required, no AOT for ARM64 device target, reliable in CI.
+      # For a real device IPA, set up Apple P12 cert + provisioning profile as
+      # GitHub secrets and change to -r ios-arm64 -p:BuildIpa=true.
+      - name: Build iOS App (Simulator)
         run: |
           dotnet publish MauiApp/MauiApp.csproj \
             -f net9.0-ios \
+            -r iossimulator-x64 \
             -c Release \
-            -r ios-arm64 \
-            -p:BuildIpa=false \
-            -p:EnableCodeSigning=false \
-            -p:CodesignKey="" \
-            -p:CodesignProvision="" \
             -o ./ios-output
 
       - name: Find App bundle
-        run: find . -name "*.app" -type d 2>/dev/null || echo "No .app found"
+        run: find . -name "*.app" -type d 2>/dev/null || echo "No .app bundle found"
 
-      - name: Upload iOS App
+      - name: Upload iOS Simulator App
         uses: actions/upload-artifact@v4
         with:
-          name: SpOneHR-iOS-v${{ github.run_number }}
+          name: SpOneHR-iOS-Simulator-v${{ github.run_number }}
           path: |
             ios-output/**/*.app
-            MauiApp/bin/Release/net9.0-ios/ios-arm64/**/*.app
+            MauiApp/bin/Release/net9.0-ios/iossimulator-x64/**/*.app
           if-no-files-found: warn
           retention-days: 30
