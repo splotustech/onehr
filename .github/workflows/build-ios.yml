@@ -7,30 +7,42 @@ on:
 
 jobs:
   build-ios:
-    # macOS is REQUIRED — iOS workload only runs on macOS
-    runs-on: macos-latest
+    # macos-15 = macOS 15 (Sequoia) with Xcode 16.x stable
+    # DO NOT use macos-latest — it is now macOS 26 (beta) which has
+    # .NET 10 pre-installed and requires Xcode 26.5 (not yet stable).
+    runs-on: macos-15
 
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Install .NET 9 and force it as the active SDK.
+      # Pin to 9.0.x — macos-15 does not pre-install .NET 10,
+      # so this avoids the iOS SDK 26.5 / Xcode 26.5 mismatch.
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
 
-      # macOS supports BOTH android and ios workloads.
-      # We need android here because MauiApp.csproj declares
-      # net9.0-android in TargetFrameworks — dotnet restore
-      # checks all targets even when we only publish for iOS.
-      - name: Install workloads (iOS + Android — both supported on macOS)
+      - name: Show SDK and Xcode versions
+        run: |
+          echo "=== .NET SDK ==="
+          dotnet --version
+          echo "=== Xcode ==="
+          xcode-select -p
+          xcodebuild -version
+
+      # macOS supports both ios and android workloads.
+      # android is needed because MauiApp.csproj declares
+      # net9.0-android in TargetFrameworks.
+      - name: Install MAUI workloads
         run: |
           dotnet workload install ios android maui-ios maui-android \
             --skip-sign-check
 
-      # Pass TargetFramework to skip restoring Android SDK packages
-      - name: Restore iOS only
+      # Restore only the iOS target — skips android SDK download
+      - name: Restore (iOS only)
         run: |
           dotnet restore MauiApp/MauiApp.csproj \
             -p:TargetFramework=net9.0-ios
@@ -51,8 +63,6 @@ jobs:
         run: |
           echo "=== IPA files ==="
           find . -name "*.ipa" 2>/dev/null || echo "No .ipa found"
-          echo "=== App bundles ==="
-          find . -name "*.app" -maxdepth 10 2>/dev/null | head -5
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
