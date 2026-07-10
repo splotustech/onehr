@@ -26,7 +26,8 @@ jobs:
           dotnet publish MauiApp/MauiApp.csproj `
             -f net9.0-android `
             -c Release `
-            -o ./android-output
+            -o ./android-output `
+            -p:AndroidKeyStore=false
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
@@ -48,10 +49,10 @@ jobs:
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.1xx'
+          dotnet-version: '9.0.x'
 
       - name: Install MAUI iOS workload
-        run: dotnet workload install ios maui-ios --skip-manifest-update --skip-sign-check
+        run: dotnet workload install maui --skip-manifest-update --skip-sign-check
 
       - name: Build iOS App
         run: |

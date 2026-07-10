@@ -17,13 +17,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install .NET 9 in the 9.0.1xx feature band (Feb 2025 era).
-      # global.json latestFeature rollforward picks this up correctly.
-      # This era uses iOS SDK 18.x — compatible with Xcode 16.4 on macos-15.
+      # Install latest .NET 9 patch (9.0.x). The bundled workload manifest in
+      # the latest 9.0 SDK is compatible with MAUI 9.0.60 (9.0.300 feature band).
+      # Pinning to 9.0.1xx caused an SDK band mismatch: that band only knows MAUI
+      # up to ~9.0.10, so restoring 9.0.60 packages broke MSBuild targets.
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.1xx'
+          dotnet-version: '9.0.x'
 
       - name: Verify .NET and Xcode versions
         run: |
