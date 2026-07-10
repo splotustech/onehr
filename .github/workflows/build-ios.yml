@@ -7,6 +7,7 @@ on:
 
 jobs:
   build-ios:
+    # macOS is REQUIRED — iOS workload only runs on macOS
     runs-on: macos-latest
 
     steps:
@@ -19,21 +20,21 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      # MauiApp targets both net9.0-android AND net9.0-ios
-      # so the restore step needs BOTH workloads even when
-      # we only publish for iOS.
-      - name: Install MAUI workloads (iOS + Android)
+      # macOS supports BOTH android and ios workloads.
+      # We need android here because MauiApp.csproj declares
+      # net9.0-android in TargetFrameworks — dotnet restore
+      # checks all targets even when we only publish for iOS.
+      - name: Install workloads (iOS + Android — both supported on macOS)
         run: |
           dotnet workload install ios android maui-ios maui-android \
             --skip-sign-check
 
-      # Restore only the iOS target to skip Android SDK download
-      - name: Restore (iOS only)
+      # Pass TargetFramework to skip restoring Android SDK packages
+      - name: Restore iOS only
         run: |
           dotnet restore MauiApp/MauiApp.csproj \
             -p:TargetFramework=net9.0-ios
 
-      # Build unsigned IPA for real iOS device (arm64)
       - name: Build iOS IPA
         run: |
           dotnet publish MauiApp/MauiApp.csproj \
@@ -46,12 +47,12 @@ jobs:
             -p:CodesignProvision="" \
             -o ./ios-output
 
-      - name: Find built IPA
+      - name: Find IPA
         run: |
-          echo "=== Searching for IPA files ==="
-          find . -name "*.ipa" 2>/dev/null || echo "No IPA found"
-          echo "=== Searching for .app bundles ==="
-          find . -name "*.app" -maxdepth 8 2>/dev/null | head -10
+          echo "=== IPA files ==="
+          find . -name "*.ipa" 2>/dev/null || echo "No .ipa found"
+          echo "=== App bundles ==="
+          find . -name "*.app" -maxdepth 10 2>/dev/null | head -5
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -60,7 +61,6 @@ jobs:
           path: |
             ios-output/*.ipa
             ios-output/**/*.ipa
-            MauiApp/bin/Release/net9.0-ios/ios-arm64/publish/*.ipa
             MauiApp/bin/Release/net9.0-ios/**/*.ipa
           if-no-files-found: warn
           retention-days: 30

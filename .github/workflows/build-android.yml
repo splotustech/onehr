@@ -19,15 +19,12 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      # MauiApp targets both android and ios — install both workloads
-      # so restore does not fail on the iOS TargetFramework declaration
-      - name: Install MAUI workloads (Android + iOS stubs)
-        run: |
-          dotnet workload install android ios maui-android maui-ios \
-            --skip-sign-check
+      # Linux only supports android workloads — ios workload is macOS only
+      - name: Install Android workloads
+        run: dotnet workload install android maui-android --skip-sign-check
 
-      # Restore only Android target — skip iOS download on Linux
-      - name: Restore (Android only)
+      # Restore ONLY the Android target to avoid ios workload requirement
+      - name: Restore Android only
         run: |
           dotnet restore MauiApp/MauiApp.csproj \
             -p:TargetFramework=net9.0-android
