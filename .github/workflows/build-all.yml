@@ -19,7 +19,7 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Install MAUI Android workload
-        run: dotnet workload install android maui-android
+        run: dotnet workload install android maui-android --skip-sign-check
 
       - name: Build Android APK
         run: |
@@ -39,17 +39,19 @@ jobs:
 
   # ── iOS IPA ────────────────────────────────────────────────────────────────
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-15
+    env:
+      DOTNET_MULTILEVEL_LOOKUP: 0
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '9.0.1xx'
 
       - name: Install MAUI iOS workload
-        run: dotnet workload install ios maui-ios
+        run: dotnet workload install ios maui-ios --skip-manifest-update --skip-sign-check
 
       - name: Build iOS IPA
         run: |

@@ -27,7 +27,7 @@ jobs:
       # even for a pure Android build because MauiApp.csproj has UseMaui=true.
       # Linux containers support the android portion of the maui workload.
       - name: Install MAUI Android workload
-        run: dotnet workload install maui --skip-sign-check
+        run: dotnet workload install android maui-android --skip-sign-check
 
       - name: Restore Android only
         run: |

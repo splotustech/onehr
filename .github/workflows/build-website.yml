@@ -22,11 +22,11 @@ jobs:
         run: dotnet --version
 
       - name: Restore
-        run: dotnet restore "Server/SMART HRMS SYSTEM.Server.csproj"
+        run: dotnet restore 'Server/SMART HRMS SYSTEM.Server.csproj'
 
       - name: Publish Website
         run: |
-          dotnet publish "Server/SMART HRMS SYSTEM.Server.csproj" \
+          dotnet publish 'Server/SMART HRMS SYSTEM.Server.csproj' \
             -c Release \
             -o ./website-output
 
