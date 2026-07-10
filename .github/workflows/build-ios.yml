@@ -7,42 +7,35 @@ on:
 
 jobs:
   build-ios:
-    # macos-15 = macOS 15 (Sequoia) with Xcode 16.x stable
-    # DO NOT use macos-latest — it is now macOS 26 (beta) which has
-    # .NET 10 pre-installed and requires Xcode 26.5 (not yet stable).
     runs-on: macos-15
+
+    env:
+      # Prevent dotnet from finding pre-installed .NET 10 on the runner.
+      # With global.json pinning .NET 9, this ensures .NET 9 is used.
+      DOTNET_MULTILEVEL_LOOKUP: 0
 
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install .NET 9 and force it as the active SDK.
-      # Pin to 9.0.x — macos-15 does not pre-install .NET 10,
-      # so this avoids the iOS SDK 26.5 / Xcode 26.5 mismatch.
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
+          global-json-file: global.json
 
-      - name: Show SDK and Xcode versions
+      - name: Verify .NET 9 is active
         run: |
-          echo "=== .NET SDK ==="
           dotnet --version
-          echo "=== Xcode ==="
-          xcode-select -p
-          xcodebuild -version
+          echo "SDK must start with 9. — if it shows 10.x, the fix failed."
 
-      # macOS supports both ios and android workloads.
-      # android is needed because MauiApp.csproj declares
-      # net9.0-android in TargetFrameworks.
       - name: Install MAUI workloads
         run: |
           dotnet workload install ios android maui-ios maui-android \
             --skip-sign-check
 
-      # Restore only the iOS target — skips android SDK download
-      - name: Restore (iOS only)
+      - name: Restore iOS only
         run: |
           dotnet restore MauiApp/MauiApp.csproj \
             -p:TargetFramework=net9.0-ios
@@ -60,9 +53,7 @@ jobs:
             -o ./ios-output
 
       - name: Find IPA
-        run: |
-          echo "=== IPA files ==="
-          find . -name "*.ipa" 2>/dev/null || echo "No .ipa found"
+        run: find . -name "*.ipa" 2>/dev/null || echo "No IPA found"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4

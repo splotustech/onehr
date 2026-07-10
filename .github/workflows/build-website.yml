@@ -9,6 +9,9 @@ jobs:
   build-website:
     runs-on: ubuntu-22.04
 
+    env:
+      DOTNET_MULTILEVEL_LOOKUP: 0
+
     steps:
 
       - name: Checkout
@@ -18,8 +21,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
+          global-json-file: global.json
 
-      - name: Show .NET version
+      - name: Verify .NET 9 is active
         run: dotnet --version
 
       - name: Restore

@@ -7,8 +7,10 @@ on:
 
 jobs:
   build-android:
-    # ubuntu-22.04 = stable Linux runner with known .NET environment
     runs-on: ubuntu-22.04
+
+    env:
+      DOTNET_MULTILEVEL_LOOKUP: 0
 
     steps:
 
@@ -19,17 +21,16 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
+          global-json-file: global.json
 
-      - name: Show .NET version
+      - name: Verify .NET 9 is active
         run: dotnet --version
 
-      # Linux only supports android workloads — ios is macOS only
       - name: Install Android workloads
         run: |
           dotnet workload install android maui-android --skip-sign-check
 
-      # Restore only Android target — avoids ios workload requirement
-      - name: Restore (Android only)
+      - name: Restore Android only
         run: |
           dotnet restore MauiApp/MauiApp.csproj \
             -p:TargetFramework=net9.0-android
