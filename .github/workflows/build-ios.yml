@@ -10,45 +10,37 @@ jobs:
     runs-on: macos-15
 
     env:
-      # Prevent dotnet from finding .NET 10 in other locations
       DOTNET_MULTILEVEL_LOOKUP: 0
-      # Prevent dotnet from using the latest rollforward (stay on .NET 9)
-      DOTNET_ROLL_FORWARD: Disable
 
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install the EXACT .NET 9.0.100 GA release (November 2024).
-      # This SDK ships with iOS 18.0 workload which requires Xcode 16.0+.
-      # The runner has Xcode 16.4 — compatible.
-      # We must NOT use a later .NET 9 patch because Apple updated the
-      # iOS workload to 26.5.9002 (requiring Xcode 26.5) in mid-2025.
-      - name: Setup .NET 9.0.100
+      # Install .NET 9 in the 9.0.1xx feature band (Feb 2025 era).
+      # global.json latestFeature rollforward picks this up correctly.
+      # This era uses iOS SDK 18.x — compatible with Xcode 16.4 on macos-15.
+      - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.100'
+          dotnet-version: '9.0.1xx'
 
-      - name: Verify .NET 9 is active
+      - name: Verify .NET and Xcode versions
         run: |
-          echo "=== SDK version ==="
           dotnet --version
-          echo "=== Xcode version ==="
           xcodebuild -version
 
-      # --skip-manifest-update is CRITICAL:
-      # Without it, dotnet downloads the latest workload manifest which
-      # points to iOS SDK 26.5 (Xcode 26.5 required).
-      # With it, dotnet uses the manifest BUNDLED in .NET 9.0.100 SDK
-      # which points to iOS SDK 18.0 (Xcode 16.0+ compatible).
-      - name: Install iOS workload (using bundled manifest only)
+      # Install full MAUI workload — satisfies BOTH maui-ios AND maui-android.
+      # MAUI projects always need maui-android even when building iOS only.
+      # --skip-manifest-update: uses the manifest bundled with the installed SDK
+      # (iOS 18.x workload) instead of downloading the latest (iOS 26.5.9002
+      # which needs Xcode 26.5 — not available on this runner).
+      - name: Install MAUI workload
         run: |
-          dotnet workload install ios android \
+          dotnet workload install maui \
             --skip-manifest-update \
             --skip-sign-check
 
-      # Restore only iOS target to skip android SDK download
       - name: Restore iOS only
         run: |
           dotnet restore MauiApp/MauiApp.csproj \

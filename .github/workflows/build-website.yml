@@ -9,6 +9,7 @@ jobs:
   build-website:
     runs-on: ubuntu-22.04
 
+    # Docker container with ONLY .NET 9 — no .NET 10 conflict.
     container:
       image: mcr.microsoft.com/dotnet/sdk:9.0
 
@@ -29,7 +30,7 @@ jobs:
             -c Release \
             -o ./website-output
 
-      - name: Zip Website
+      - name: Install zip and package
         run: |
           apt-get update -qq && apt-get install -y zip -qq
           cd website-output
