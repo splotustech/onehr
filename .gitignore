@@ -1,0 +1,18 @@
+## .NET / Blazor / MAUI
+bin/
+obj/
+*.user
+.vs/
+publish/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Logs
+*.log
+
+## Secrets — never commit these
+appsettings.Development.json
+*.pfx
+*.p12
