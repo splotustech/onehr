@@ -10,31 +10,45 @@ jobs:
     runs-on: macos-15
 
     env:
-      # Prevent dotnet from finding pre-installed .NET 10 on the runner.
-      # With global.json pinning .NET 9, this ensures .NET 9 is used.
+      # Prevent dotnet from finding .NET 10 in other locations
       DOTNET_MULTILEVEL_LOOKUP: 0
+      # Prevent dotnet from using the latest rollforward (stay on .NET 9)
+      DOTNET_ROLL_FORWARD: Disable
 
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9
+      # Install the EXACT .NET 9.0.100 GA release (November 2024).
+      # This SDK ships with iOS 18.0 workload which requires Xcode 16.0+.
+      # The runner has Xcode 16.4 — compatible.
+      # We must NOT use a later .NET 9 patch because Apple updated the
+      # iOS workload to 26.5.9002 (requiring Xcode 26.5) in mid-2025.
+      - name: Setup .NET 9.0.100
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
-          global-json-file: global.json
+          dotnet-version: '9.0.100'
 
       - name: Verify .NET 9 is active
         run: |
+          echo "=== SDK version ==="
           dotnet --version
-          echo "SDK must start with 9. — if it shows 10.x, the fix failed."
+          echo "=== Xcode version ==="
+          xcodebuild -version
 
-      - name: Install MAUI workloads
+      # --skip-manifest-update is CRITICAL:
+      # Without it, dotnet downloads the latest workload manifest which
+      # points to iOS SDK 26.5 (Xcode 26.5 required).
+      # With it, dotnet uses the manifest BUNDLED in .NET 9.0.100 SDK
+      # which points to iOS SDK 18.0 (Xcode 16.0+ compatible).
+      - name: Install iOS workload (using bundled manifest only)
         run: |
-          dotnet workload install ios android maui-ios maui-android \
+          dotnet workload install ios android \
+            --skip-manifest-update \
             --skip-sign-check
 
+      # Restore only iOS target to skip android SDK download
       - name: Restore iOS only
         run: |
           dotnet restore MauiApp/MauiApp.csproj \

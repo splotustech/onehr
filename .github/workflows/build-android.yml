@@ -9,27 +9,24 @@ jobs:
   build-android:
     runs-on: ubuntu-22.04
 
-    env:
-      DOTNET_MULTILEVEL_LOOKUP: 0
+    # Use official .NET 9 SDK Docker image — contains ONLY .NET 9.
+    # This completely avoids the .NET 10 pre-installed on the runner.
+    container:
+      image: mcr.microsoft.com/dotnet/sdk:9.0
 
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.x'
-          global-json-file: global.json
-
-      - name: Verify .NET 9 is active
+      - name: Verify .NET version (must be 9.x)
         run: dotnet --version
 
-      - name: Install Android workloads
-        run: |
-          dotnet workload install android maui-android --skip-sign-check
+      # android workload is supported on Linux
+      - name: Install Android workload
+        run: dotnet workload install android --skip-sign-check
 
+      # Restore only Android target — avoids needing ios workload on Linux
       - name: Restore Android only
         run: |
           dotnet restore MauiApp/MauiApp.csproj \

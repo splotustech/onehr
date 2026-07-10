@@ -9,21 +9,15 @@ jobs:
   build-website:
     runs-on: ubuntu-22.04
 
-    env:
-      DOTNET_MULTILEVEL_LOOKUP: 0
+    container:
+      image: mcr.microsoft.com/dotnet/sdk:9.0
 
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.x'
-          global-json-file: global.json
-
-      - name: Verify .NET 9 is active
+      - name: Verify .NET version
         run: dotnet --version
 
       - name: Restore
@@ -37,6 +31,7 @@ jobs:
 
       - name: Zip Website
         run: |
+          apt-get update -qq && apt-get install -y zip -qq
           cd website-output
           zip -r ../OneHR-Website-Deploy.zip .
 
