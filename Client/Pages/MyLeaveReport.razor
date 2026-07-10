@@ -1,0 +1,996 @@
+﻿@page "/leave-report"
+@using SMART_HRMS_SYSTEM.Shared.ViewModel
+@using SMART_HRMS_SYSTEM.Shared.Models
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager NavManager
+
+<div class="report-wrapper">
+    <div class="report-container">
+
+        <!-- Header -->
+        <div class="report-header">
+            <div class="d-flex align-items-center gap-3">
+                <div>
+                    <h2>My Leave Approval Management</h2>
+                    <p>Full Day, Half Day, and Early Out requests Report.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-row mb-4">
+            <div class="stat-card stat-total shadow-sm">
+                <div class="stat-icon"><i class="bi bi-files"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Total Requests</p>
+                    <h3 class="stat-count">@TotalRequests</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-pending shadow-sm">
+                <div class="stat-icon"><i class="bi bi-hourglass-split"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Pending</p>
+                    <h3 class="stat-count text-warning">@PendingCount</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-approved shadow-sm">
+                <div class="stat-icon"><i class="bi bi-check-all"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Approved</p>
+                    <h3 class="stat-count text-success">@ApprovedCount</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-rejected shadow-sm">
+                <div class="stat-icon"><i class="bi bi-trash3"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Rejected</p>
+                    <h3 class="stat-count text-danger">@RejectedCount</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Card -->
+        <div class="filter-card shadow-sm mb-4">
+            <div class="filter-row">
+                <div class="filter-item">
+                    <label class="filter-label">VIEW TYPE</label>
+                    <select class="form-select custom-select" @bind="FilterType" @bind:after="LoadRequests">
+                        <option value="Daily">Daily</option>
+                        <option value="Monthly">Monthly</option>
+                    </select>
+                </div>
+
+                @if (FilterType == "Daily")
+                {
+                    <div class="filter-item">
+                        <label class="filter-label">DATE</label>
+                        <input type="date" class="form-control custom-select" @bind="SelectedDate" @bind:after="LoadRequests" />
+                    </div>
+                }
+                else
+                {
+                    <div class="filter-item">
+                        <label class="filter-label">MONTH</label>
+                        <div class="d-flex gap-2">
+                            <select class="form-select custom-select" @bind="SelectedMonth" @bind:after="LoadRequests">
+                                @for (int m = 1; m <= 12; m++)
+                                {
+                                    <option value="@m">@System.Globalization.DateTimeFormatInfo.CurrentInfo.GetMonthName(m)</option>
+                                }
+                            </select>
+
+                        </div>
+                    </div>
+                    <div class="filter-item">
+                        <label class="filter-label">YEAR</label>
+                        <div class="d-flex gap-2">
+
+                            <select class="form-select custom-select" @bind="SelectedYear" @bind:after="LoadRequests">
+                                @for (int y = 2024; y <= DateTime.Now.Year + 1; y++)
+                                {
+                                    <option value="@y">@y</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                }
+
+                <div class="filter-item">
+                    <label class="filter-label">STATUS</label>
+                    <select class="form-select custom-select" @bind="FilterStatus" @bind:after="ApplyFilters">
+                        <option value="All">All Status</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Rejected">Rejected</option>
+                    </select>
+                </div>
+
+              @*   <div class="filter-item search-item">
+                    <label class="filter-label">SEARCH EMPLOYEE</label>
+                    <div class="search-box">
+                        <i class="bi bi-search search-icon"></i>
+                        <input class="form-control custom-select pl-search" placeholder="Name or Subject..." @oninput="OnSearchInput" />
+                    </div>
+                </div> *@
+
+                <div class="filter-item btn-item">
+                    <label class="filter-label d-none d-md-block">&nbsp;</label>
+                    <button class="btn-reset w-100" @onclick="ResetFilters">
+                        <i class="bi bi-arrow-counterclockwise"></i> Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Grid -->
+        <div class="report-table-wrapper">
+            @if (IsLoading)
+            {
+                <div class="empty-state shadow-sm">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+                    <h5>Loading Data...</h5>
+                    <p>Fetching outpass requests.</p>
+                </div>
+            }
+            else if (!FilteredRecords.Any())
+            {
+                <div class="empty-state shadow-sm">
+                    <div class="empty-icon placeholder-glow"><i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 2rem;"></i></div>
+                    <h5 class="mt-2">No Requests Found</h5>
+                    <p>No outpass requests match your current filters.</p>
+                </div>
+            }
+            else
+            {
+                <table class="table modern-table">
+                    <thead>
+                        <tr>                          
+                            <th>Request Details</th>
+                            <th>Schedule</th>
+                            <th>Reason / Subject</th>
+                            <th>Status</th>
+                            <th class="text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in FilteredRecords)
+                        {
+                            <tr>                               
+                                <td data-label="Request Details">
+                                    <div class="req-type-badge @r.RequestType.Replace(" ", "-").ToLower()">@r.RequestType</div>
+                                    <div class="leave-meta">
+                                        <span class="cat">@r.LeaveCategory</span> • <span class="type">@r.LeaveType</span>
+                                    </div>
+                                </td>
+                                <td data-label="Schedule">
+                                    <div class="schedule-wrapper">
+
+                                        <!-- 📅 MAIN SCHEDULE (Dates & Time) -->
+                                        <div class="schedule-main">
+                                            @if (r.RequestType == "Full Day Leave")
+                                            {
+                                                <div class="date-range">
+                                                    <span class="d-block fw-bold text-dark">@r.FromDate.ToString("dd MMM yyyy")</span>
+                                                    @if (r.ToDate.HasValue && r.ToDate.Value.Date != r.FromDate.Date)
+                                                    {
+                                                        <small class="text-muted d-flex align-items-center gap-1 mt-1">
+                                                            <i class="bi bi-arrow-return-right"></i> @r.ToDate.Value.ToString("dd MMM yyyy")
+                                                        </small>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="date-single">
+                                                    <span class="d-block fw-bold text-dark">@r.FromDate.ToString("dd MMM yyyy")</span>
+                                                    <div class="time-badge mt-1">
+                                                        <i class="bi bi-clock"></i>
+                                                        @(r.OutTime.HasValue? DateTime.Today.Add(r.OutTime.Value).ToString("hh:mm tt") : "-")
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+
+                                        <!-- 🕒 SUBMISSION TIMESTAMP -->
+                                        @if (r.CreatedOn.HasValue)
+                                        {
+                                            <div class="request-timestamp mt-2">
+                                                <i class="bi bi-calendar-plus text-primary"></i>
+                                                Req: @r.CreatedOn.Value.ToString("dd MMM, hh:mm tt")
+                                            </div>
+                                        }
+
+                                    </div>
+                                </td>
+                                <td data-label="Reason">
+                                    <div class="reason-cell">
+                                        <strong>@r.Subject</strong>
+                                        <p class="mb-0 text-muted small text-truncate" title="@r.Reason">@r.Reason</p>
+                                    </div>
+                                </td>
+                                <td data-label="Status">
+                                    <span class="status-pill @GetStatusCss(r.Status)">@r.Status</span>
+                                </td>
+                                <td data-label="Action" class="text-center">
+                                    <div class="action-buttons justify-content-center">
+                                       
+                                            <button class="btn-view" @onclick="() => ShowFullDetails(r)"><i class="bi bi-info-circle"></i> Details</button>
+
+                                            <button class="btn-circle btn-reject" @onclick="() => OpenRejectModal(r)" title="Delete"><i class="bi bi-x-lg"></i></button>
+
+                                        
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- 🔴 REJECT CANCEL MODAL -->
+<!-- ============================================== -->
+@if (ShowRejectModal)
+{
+    <div class="modal-backdrop-custom">
+        <div class="confirm-modal shadow-lg animate-pop">
+            <div class="modal-icon-circle text-danger"><i class="bi bi-trash3-fill"></i></div>
+            <h5 class="fw-bold mt-2">Delete Request</h5>
+            <p class="text-muted mb-4 p-modal">Are you sure you want to delete this leave request? This action cannot be undone.</p>
+            <div class="modal-actions-custom">
+                <button class="btn-modal-red" @onclick="CloseModals">Cancel</button>
+                <button class="btn-modal-green" @onclick="ConfirmDelete" disabled="@IsProcessing">
+                    @(IsProcessing ? "Deleting..." : "Yes, Delete")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+<!-- TOAST -->
+@if (!string.IsNullOrEmpty(ToastMsg))
+{
+    <div class="toast-popup @ToastClass">@ToastMsg</div>
+}
+
+<style>
+    /* Schedule Column UI */
+    .schedule-wrapper {
+        display: flex;
+        flex-direction: column;
+        min-width: 140px;
+    }
+
+    .schedule-main {
+        margin-bottom: 2px;
+    }
+
+    /* Time Badge for Half Day / Early Out */
+    .time-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background-color: #f1f5f9;
+        color: #334155;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 8px;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+    }
+
+        .time-badge i {
+            color: #3b82f6; /* Blue icon */
+            font-size: 12px;
+        }
+
+    /* Requested Time Micro-Card */
+    .request-timestamp {
+        font-size: 11px;
+        color: #64748b;
+        background: #f8fafc;
+        padding: 4px 8px;
+        border-radius: 6px;
+        border-left: 3px solid #cbd5e1; /* Subtle gray accent border */
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-weight: 500;
+    }
+
+    .schedule-wrapper {
+        align-items: flex-end;
+        text-align: right;
+    }
+
+    .request-timestamp {
+        border-left: none;
+        border-right: 3px solid #cbd5e1; /* Move border to the right for mobile */
+    }
+    :root {
+        --primary: #4f46e5;
+        --success: #10b981;
+        --danger: #ef4444;
+        --pending: #f59e0b;
+        --bg-main: #f8fafc;
+    }
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: white;
+        border-radius: 16px;
+    }
+
+    .report-wrapper {
+        background: var(--bg-main);
+        min-height: 100vh;
+        padding: 40px 20px;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .report-container {
+        max-width: 1250px;
+        margin: auto;
+    }
+
+    .icon-main {
+        width: 50px;
+        height: 50px;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        color: var(--primary);
+        font-size: 24px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+
+    .report-header h2 {
+        font-weight: 800;
+        color: #1e293b;
+        margin: 0;
+    }
+
+    /* STATS */
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 20px;
+    }
+
+    .stat-card {
+        background: #fff;
+        padding: 25px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        border: none;
+    }
+
+    .stat-icon {
+        width: 54px;
+        height: 54px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+    }
+
+    .stat-total .stat-icon {
+        background: #eef2ff;
+        color: var(--primary);
+    }
+
+    .stat-pending .stat-icon {
+        background: #fffbeb;
+        color: var(--pending);
+    }
+
+    .stat-approved .stat-icon {
+        background: #ecfdf5;
+        color: var(--success);
+    }
+
+    .stat-rejected .stat-icon {
+        background: #fef2f2;
+        color: var(--danger);
+    }
+
+    .stat-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        margin: 0;
+    }
+
+    .stat-count {
+        font-size: 28px;
+        font-weight: 800;
+        margin: 0;
+    }
+
+    /* FILTERS */
+    .filter-card {
+        background: #fff;
+        border-radius: 16px;
+        padding: 20px;
+    }
+
+    .filter-row {
+        display: flex;
+        gap: 15px;
+        align-items: flex-end;
+        flex-wrap: wrap;
+    }
+
+    .filter-item {
+        flex: 1;
+        min-width: 140px;
+    }
+
+    .search-item {
+        flex: 2;
+        min-width: 250px;
+    }
+
+    .filter-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #94a3b8;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .custom-select {
+        border-radius: 10px;
+        border: 1.5px solid #e2e8f0;
+        padding: 10px 15px;
+        font-size: 14px;
+        background: #fdfdfd;
+    }
+
+    .btn-reset {
+        background: #f1f5f9;
+        border: none;
+        padding: 10px;
+        border-radius: 10px;
+        font-weight: 600;
+        color: #475569;
+    }
+
+    /* TABLE */
+    .modern-table {
+        width: 100%;
+        background: #fff;
+        border-radius: 16px;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+    }
+
+        .modern-table th {
+            background: #f8fafc;
+            padding: 18px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            border-bottom: 2.5px solid #f1f5f9;
+        }
+
+        .modern-table td {
+            padding: 18px;
+            vertical-align: middle;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+    .employee-cell {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        background: var(--primary);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 14px;
+    }
+
+    .emp-name {
+        font-weight: 700;
+        color: #1e293b;
+        display: block;
+    }
+
+    .emp-id {
+        font-size: 11px;
+        color: #94a3b8;
+    }
+
+    .req-type-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+    }
+
+    .full-day-leave {
+        background: #e0f2fe;
+        color: #0369a1;
+    }
+
+    .first-half-day, .second-half-day {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .early-out {
+        background: #fae8ff;
+        color: #86198f;
+    }
+
+    .status-pill {
+        padding: 6px 14px;
+        border-radius: 50px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .st-approved {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .st-pending {
+        background: #ffedd5;
+        color: #9a3412;
+    }
+
+    .st-rejected {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+    }
+
+    .btn-circle {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        transition: 0.2s;
+    }
+
+    .btn-approve {
+        background: var(--success);
+    }
+
+    .btn-reject {
+        background: var(--danger);
+    }
+
+    .btn-circle:hover {
+        transform: scale(1.1);
+        filter: brightness(0.9);
+    }
+
+    .btn-view {
+        background: #f1f5f9;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #475569;
+    }
+
+    /* ===== NEW MODAL UI ===== */
+    .modal-backdrop-custom {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(15, 23, 42, 0.65);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+        padding: 20px;
+    }
+
+    .confirm-modal {
+        background: #fff;
+        border-radius: 24px;
+        width: 100%;
+        max-width: 400px;
+        padding: 35px 25px;
+        text-align: center;
+        border: none;
+    }
+
+    .modal-icon-circle {
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        background: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px;
+        margin: 0 auto 20px auto;
+        border: 1px solid #f1f5f9;
+    }
+
+    .p-modal {
+        font-size: 15px;
+        line-height: 1.5;
+        padding: 0 10px;
+    }
+
+    /* TEXTAREA UI */
+    .reject-label {
+        font-size: 12px;
+        font-weight: 700;
+        color: #374151;
+        margin-bottom: 8px;
+        display: block;
+        text-align: center;
+    }
+
+    .reject-textarea-custom {
+        width: 100%;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 12px;
+        font-size: 14px;
+        background: #fff;
+        resize: none;
+        transition: all 0.2s;
+    }
+
+        .reject-textarea-custom:focus {
+            outline: none;
+            border-color: #52b67e;
+            box-shadow: 0 0 0 4px rgba(82, 182, 126, 0.1);
+        }
+
+    /* MODAL BUTTONS */
+    .modal-actions-custom {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 10px;
+    }
+
+    .btn-modal-red, .btn-modal-green {
+        flex: 1;
+        padding: 12px 20px;
+        border-radius: 14px;
+        font-weight: 700;
+        font-size: 15px;
+        border: none;
+        transition: transform 0.1s, opacity 0.2s;
+    }
+
+    .btn-modal-red {
+        background: #ff7675; /* Soft Red */
+        color: white;
+    }
+
+    .btn-modal-green {
+        background: #52b67e; /* Soft Green */
+        color: white;
+    }
+
+        .btn-modal-red:hover, .btn-modal-green:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-modal-red:active, .btn-modal-green:active {
+            transform: translateY(0);
+        }
+
+    /* ANIMATION */
+    .animate-pop {
+        animation: modalPop 0.25s cubic-bezier(0.26, 0.53, 0.74, 1.48);
+    }
+
+    @@keyframes modalPop {
+        0% {
+            opacity: 0;
+            transform: scale(0.8);
+        }
+
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    .toast-popup {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        padding: 15px 25px;
+        border-radius: 12px;
+        color: #fff;
+        font-weight: 700;
+        z-index: 2000;
+        box-shadow: 0 10px 15px rgba(0,0,0,0.1);
+        animation: slideIn 0.3s ease;
+    }
+
+    .t-success {
+        background: var(--success);
+    }
+
+    .t-error {
+        background: var(--danger);
+    }
+
+    @@keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    /* =========================================
+           📱 MOBILE RESPONSIVE (Updated for List View)
+        ========================================= */
+    @@media (max-width: 768px) {
+        .report-wrapper {
+            padding: 15px 10px;
+        }
+
+        .filter-row {
+            flex-wrap: wrap;
+        }
+
+        .filter-item {
+            flex: 1 1 100%;
+        }
+
+        .search-item {
+            flex: 1 1 100%;
+        }
+
+        .btn-item {
+            flex: 1 1 100%;
+            margin-top: 5px;
+        }
+
+        .custom-select {
+            padding: 8px 10px;
+            font-size: 13px;
+        }
+
+        .stat-card {
+            flex-direction: column;
+            text-align: center;
+            gap: 8px;
+        }
+
+        .report-table-wrapper {
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .modern-table thead {
+            display: none;
+        }
+
+        .modern-table, .modern-table tbody, .modern-table tr, .modern-table td {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+            .modern-table tr {
+                margin-bottom: 15px;
+                background: white;
+                padding: 15px;
+                border-radius: 16px;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+                border: 1px solid #e2e8f0;
+            }
+
+            .modern-table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px 0;
+                border: none;
+                font-size: 13px;
+                gap: 15px;
+                text-align: right;
+            }
+
+                .modern-table td::before {
+                    content: attr(data-label);
+                    font-weight: 600;
+                    color: #64748b;
+                    min-width: 110px;
+                    text-transform: uppercase;
+                    font-size: 11px;
+                    text-align: left;
+                }
+        /* Mobile specific adjustments for inner cell content */
+        .employee-cell {
+            justify-content: flex-end;
+            text-align: right;
+        }
+
+        .emp-info {
+            text-align: right;
+        }
+
+        .action-buttons {
+            justify-content: flex-end !important;
+            width: 100%;
+        }
+
+        .reason-cell {
+            text-align: right;
+        }
+
+            .reason-cell p {
+                text-align: right;
+            }
+
+        .confirm-modal {
+            padding: 25px 15px;
+        }
+    }
+</style>
+
+@code {
+    private bool IsLoading = true;
+    private bool IsProcessing = false;
+    private string FilterType = "Monthly";
+    private DateTime SelectedDate = DateTime.Today;
+    private int SelectedMonth = DateTime.Today.Month;
+    private int SelectedYear = DateTime.Today.Year;
+    private string FilterStatus = "All";
+    private string SearchText = "";
+
+    private List<LeaveRequestModel> AllRecords = new();
+    private List<LeaveRequestModel> FilteredRecords = new();
+
+    private int TotalRequests, PendingCount, ApprovedCount, RejectedCount;
+    private bool ShowApproveModal, ShowRejectModal;
+    private LeaveRequestModel SelectedRequest;
+    private string EmployeeName = string.Empty;
+    private string EmployeeId = string.Empty;
+    private string HRComment = "";
+    private string ToastMsg, ToastClass;
+
+    protected override async Task OnInitializedAsync() => await LoadRequests();
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                EmployeeName = await JS.InvokeAsync<string>("localStorage.getItem", "empName");
+                if (string.IsNullOrEmpty(EmployeeName))
+                {
+                    NavManager.NavigateTo("/", true);
+                }
+                EmployeeId = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+               
+                StateHasChanged();
+            }
+            catch
+            {
+            }
+        }
+    }
+    private async Task LoadRequests()
+    {
+        IsLoading = true;
+        try
+        {
+            // Update URL to your actual API Controller
+            string url = $"api/LeaveRequest/GetAllRequests?viewType={FilterType}";
+            if (FilterType == "Daily") url += $"&date={SelectedDate:yyyy-MM-dd}";
+            else url += $"&month={SelectedMonth}&year={SelectedYear}";
+
+            var response = await Http.GetFromJsonAsync<List<LeaveRequestModel>>(url);
+            AllRecords = response.Where(t => t.EmpId ==Convert.ToInt32(EmployeeId)).ToList() ?? new();
+            ApplyFilters();
+        }
+        catch (Exception ex) { ShowToast("Server Error: " + ex.Message, "t-error"); }
+        finally { IsLoading = false; }
+    }
+
+    private void ApplyFilters()
+    {
+        var query = AllRecords.Where(t => t.EmpId == Convert.ToInt32(EmployeeId)).ToList().AsEnumerable();
+        if (FilterStatus != "All") query = query.Where(x => x.Status == FilterStatus);
+        if (!string.IsNullOrWhiteSpace(SearchText))
+            query = query.Where(x => x.EmpName.Contains(SearchText, StringComparison.OrdinalIgnoreCase) || x.Subject.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+
+        FilteredRecords = query.ToList();
+
+        TotalRequests = FilteredRecords.Where(t => t.EmpId == Convert.ToInt32(EmployeeId)).ToList().Count;
+        PendingCount = FilteredRecords.Where(t => t.EmpId == Convert.ToInt32(EmployeeId)).ToList().Count(x => x.Status == "Pending");
+        ApprovedCount = FilteredRecords.Where(t => t.EmpId == Convert.ToInt32(EmployeeId)).ToList().Count(x => x.Status == "Approved");
+        RejectedCount = FilteredRecords.Where(t => t.EmpId == Convert.ToInt32(EmployeeId)).ToList().Count(x => x.Status == "Rejected");
+
+        StateHasChanged(); // UI रिफ्रेश करण्यासाठी
+    }
+
+    private void OnSearchInput(ChangeEventArgs e) { SearchText = e.Value?.ToString() ?? ""; ApplyFilters(); }
+    private void ResetFilters() { FilterStatus = "All"; SearchText = ""; LoadRequests(); }
+
+    private void OpenApproveModal(LeaveRequestModel r) { SelectedRequest = r; ShowApproveModal = true; }
+    private void OpenRejectModal(LeaveRequestModel r) { SelectedRequest = r; HRComment = ""; ShowRejectModal = true; }
+    private void CloseModals() { ShowApproveModal = ShowRejectModal = false; SelectedRequest = null; }
+
+  
+
+    private async Task ConfirmDelete()
+    {
+          IsProcessing = true;
+        try
+        {
+           
+            var res = await Http.DeleteAsync($"api/LeaveRequest/Delete/{SelectedRequest.Id}");
+            if (res.IsSuccessStatusCode)
+            {
+                ShowToast("Leave Deleted", "t-success");
+              
+                await LoadRequests();
+                CloseModals();
+            }
+        }
+        catch { ShowToast("Operation failed", "t-error"); }
+        finally { IsProcessing = false; }
+    }
+
+    private void ShowToast(string msg, string cls)
+    {
+        ToastMsg = msg; ToastClass = cls; StateHasChanged();
+        Task.Delay(3000).ContinueWith(_ => { ToastMsg = ""; InvokeAsync(StateHasChanged); });
+    }
+
+    private string GetStatusCss(string s) => s switch { "Approved" => "st-approved", "Rejected" => "st-rejected", _ => "st-pending" };
+    private string GetInitials(string n) => string.IsNullOrWhiteSpace(n)
+    ? "?"
+    : string.Concat(n.Split(' ').Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x[0])).ToUpper(); private void ShowFullDetails(LeaveRequestModel r) => JS.InvokeVoidAsync("alert", $"Leave Detail:\n{r.Subject}\nReason: {r.Reason}\nTL Comment: {r.TLComment}\nHR Comment: {r.HRComment}");
+}

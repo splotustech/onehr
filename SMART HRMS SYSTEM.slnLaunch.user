@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "New Profile",
+    "Projects": [
+      {
+        "Path": "Server\\SMART HRMS SYSTEM.Server.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "Client\\SMART HRMS SYSTEM.Client.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

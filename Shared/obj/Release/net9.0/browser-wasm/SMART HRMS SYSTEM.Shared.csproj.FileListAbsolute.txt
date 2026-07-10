@@ -1,0 +1,5 @@
+D:\SMART HRMS SYSTEM\SMART HRMS SYSTEM\Shared\obj\Release\net9.0\browser-wasm\SMART HRMS SYSTEM.Shared.csproj.AssemblyReference.cache
+D:\SMART HRMS SYSTEM\SMART HRMS SYSTEM\Shared\obj\Release\net9.0\browser-wasm\SMART HRMS SYSTEM.Shared.GeneratedMSBuildEditorConfig.editorconfig
+D:\SMART HRMS SYSTEM\SMART HRMS SYSTEM\Shared\obj\Release\net9.0\browser-wasm\SMART HRMS SYSTEM.Shared.AssemblyInfoInputs.cache
+D:\SMART HRMS SYSTEM\SMART HRMS SYSTEM\Shared\obj\Release\net9.0\browser-wasm\SMART HRMS SYSTEM.Shared.AssemblyInfo.cs
+D:\SMART HRMS SYSTEM\SMART HRMS SYSTEM\Shared\obj\Release\net9.0\browser-wasm\SMART HRMS SYSTEM.Shared.csproj.CoreCompileInputs.cache

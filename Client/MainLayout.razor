@@ -1,0 +1,891 @@
+﻿@inherits LayoutComponentBase
+@inject IJSRuntime JS
+@inject NavigationManager NavManager
+@inject HttpClient Http
+@implements IAsyncDisposable
+
+<!-- ── NEW VERSION UPDATE BANNER ───────────────────────────────────────── -->
+@if (ShowUpdateBanner)
+{
+    <div class="update-banner">
+        <div class="update-banner-left">
+            <span class="update-pulse"></span>
+            <span class="update-text">
+                <strong>New Update Available!</strong>
+                &nbsp;Version @NewVersionLabel is ready.
+            </span>
+        </div>
+        <div class="update-banner-right">
+            @if (UpdateCountdown > 0)
+            {
+                <span class="update-countdown">Auto-updating in @UpdateCountdown sec</span>
+            }
+            <button class="update-now-btn" @onclick="ApplyUpdate">
+                <i class="bi bi-arrow-clockwise"></i> Update Now
+            </button>
+            <button class="update-later-btn" @onclick="() => ShowUpdateBanner = false">Later</button>
+        </div>
+    </div>
+}
+
+<!-- 🔥 TOP NAVBAR -->
+<div class="top-navbar shadow-sm">
+    <div class="brand-logo">
+        <span style="color: #4f46e5; font-size: 22px;"><img src="icon-512.png" style="height:18px" /></span> SP ONEHR
+    </div>
+    @if (!string.IsNullOrEmpty(EmployeeName))
+    {
+        <button class="menu-toggle-btn" @onclick="ToggleMenu">
+            ☰
+        </button>
+    }
+</div>
+
+<!-- 🔥 SIDE MENU -->
+<div class="side-menu-overlay @(IsMenuOpen ? "show" : "")" @onclick="ToggleMenu"></div>
+
+<div class="side-menu @(IsMenuOpen ? "open" : "")">
+
+    <!-- HEADER -->
+    <div class="side-menu-header">
+        @if (!string.IsNullOrEmpty(EmployeeName))
+        {
+            <h5 class="mb-0 fw-bold text-white">
+                <i class="bi bi-person me-2"></i> @EmployeeName
+            </h5>
+            <p class="mb-0 small text-light opacity-75 ms-4">@EmployeeDepartment</p>
+
+            <!-- Refresh + Download buttons row -->
+            <div class="header-action-row">
+                <button class="hdr-btn hdr-refresh" @onclick="ForceRefresh">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    <span>Refresh</span>
+                </button>
+                <a href="/api/download/apk" class="hdr-btn hdr-android" title="Download SP OneHR Android App">
+                    <i class="bi bi-android2"></i>
+                    <span>Android</span>
+                </a>
+                <button class="hdr-btn hdr-ios" @onclick="OpenIosGuide" title="iOS Install Guide">
+                    <i class="bi bi-apple"></i>
+                    <span>iOS</span>
+                </button>
+            </div>
+        }
+
+        <button class="close-menu-btn" @onclick="ToggleMenu">×</button>
+    </div>
+
+    <!-- ── iOS Install Guide Modal ──────────────────────────────────────── -->
+    @if (ShowIosModal)
+    {
+        <div class="ios-modal-overlay" @onclick="CloseIosGuide">
+            <div class="ios-modal" @onclick:stopPropagation="true">
+
+                <div class="ios-modal-header">
+                    <div class="ios-modal-title">
+                        <i class="bi bi-apple me-2"></i> Install SP OneHR on iPhone
+                    </div>
+                    <button class="ios-modal-close" @onclick="CloseIosGuide">×</button>
+                </div>
+
+                <div class="ios-modal-body">
+
+                    <!-- QR Code — scan to open app on phone -->
+                    <div class="qr-section">
+                        <img src="@QrCodeUrl" alt="Scan QR to open SP OneHR" class="qr-img"
+                             onerror="this.style.display='none'" />
+                        <p class="qr-label">Scan with iPhone camera to open the app</p>
+                    </div>
+
+                    <div class="ios-divider"><span>then follow these steps</span></div>
+
+                    <!-- Step-by-step Safari guide -->
+                    <div class="ios-steps">
+                        <div class="ios-step">
+                            <div class="step-num">1</div>
+                            <div class="step-text">
+                                Open the app link in <strong>Safari</strong> browser
+                                <span class="step-note">(Chrome/Edge won't work for install)</span>
+                            </div>
+                        </div>
+                        <div class="ios-step">
+                            <div class="step-num">2</div>
+                            <div class="step-text">
+                                Tap the <strong>Share</strong> button
+                                <i class="bi bi-box-arrow-up ms-1 text-primary"></i>
+                                at the bottom of Safari
+                            </div>
+                        </div>
+                        <div class="ios-step">
+                            <div class="step-num">3</div>
+                            <div class="step-text">
+                                Scroll down and tap
+                                <strong>"Add to Home Screen"</strong>
+                                <i class="bi bi-plus-square ms-1 text-primary"></i>
+                            </div>
+                        </div>
+                        <div class="ios-step">
+                            <div class="step-num">4</div>
+                            <div class="step-text">
+                                Tap <strong>"Add"</strong> — the app icon appears on your home screen
+                            </div>
+                        </div>
+                        <div class="ios-step">
+                            <div class="step-num">5</div>
+                            <div class="step-text">
+                                Open the app from home screen and allow
+                                <strong>Location</strong> permission when prompted
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ios-note">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <strong>Note:</strong> iOS Safari limits background GPS.
+                        Keep the app open and screen on while Working From Home for accurate tracking.
+                    </div>
+
+                    <!-- Copy link button -->
+                    <button class="ios-copy-btn" @onclick="CopyAppLink">
+                        <i class="bi bi-link-45deg me-1"></i>
+                        @(LinkCopied ? "✓ Link Copied!" : "Copy App Link")
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    }
+
+    <!-- BODY -->
+    <div class="side-menu-body">
+
+        <!-- MAIN -->
+        <label class="menu-category">MAIN MENU</label>
+
+        <NavLink href="/attendance" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+            <i class="bi bi-clock"></i> Mark Attendance
+        </NavLink>
+
+        <a href="/apply-leave" class="menu-item">
+            <i class="bi bi-calendar-plus"></i> Apply Leave Request
+        </a>
+
+        @if (!string.IsNullOrEmpty(EmployeeName) && (EmployeeDepartment == "Human  Resources" || EmployeeId == "1" ||
+        EmployeeId == "7" || EmployeeId == "12"))
+        {
+            <!-- HR MENU -->
+            <label class="menu-category mt-3">HR MODULE</label>
+
+            <NavLink href="/manual-attendance" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+                <i class="bi bi-clock"></i> Manual Attendance
+            </NavLink>
+            <NavLink href="/hr_daily_attendance" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+                <i class="bi bi-bar-chart"></i> Daily / Monthly Attendance Report
+            </NavLink>
+
+            <NavLink href="/outpass-request" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+                <i class="bi bi-box-arrow-right"></i> Out Pass Request
+            </NavLink>
+
+            <NavLink href="/leave-request" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+                <i class="bi bi-calendar-check"></i> Leave/EarlyOut/WFH Request
+            </NavLink>
+
+            <NavLink href="/movement-register-report" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+                <i class="bi bi-calendar-check"></i> Movement Register(Tea/Lunch/Short Exit)
+            </NavLink>
+
+            <NavLink href="/wfh-monitoring" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+                <i class="bi bi-geo-alt-fill"></i> WFH Live Monitoring
+            </NavLink>
+
+           
+           
+            @* <NavLink href="/early-out" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+                <i class="bi bi-arrow-right-circle"></i> Early Exit Request
+        </NavLink> *@
+
+        }
+        <!-- EXTRA -->
+        @if (!string.IsNullOrEmpty(EmployeeName) && (EmployeeId == "12" || EmployeeId == "10" || EmployeeId == "1061" ||
+        EmployeeId == "6" || EmployeeId == "1058"))
+        {
+            <!-- HR MENU -->
+            <label class="menu-category mt-3">TL MODULE</label>
+
+            <NavLink href="/team-leave-requests" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+                <i class="bi bi-calendar-check"></i> Leave/EarlyOut/WFH Request
+            </NavLink>
+
+           
+
+        }
+
+        <!-- EXTRA -->
+        <label class="menu-category mt-3">Report</label>
+        <NavLink href="/my-report" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+            <i class="bi bi-file-earmark-text"></i> My Attendance Report
+        </NavLink>
+        <NavLink href="/outpass-report" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+            <i class="bi bi-file-earmark-text"></i> My In/Out Pass Report
+        </NavLink>
+        <NavLink href="/leave-report" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+            <i class="bi bi-file-earmark-text"></i> My Leave Report
+        </NavLink>
+        <NavLink href="/mymovement-register-report" class="menu-item" ActiveClass="active" @onclick="ToggleMenu">
+            <i class="bi bi-calendar-check"></i> My (Tea/Lunch/Short Exit) Register
+        </NavLink>
+        <label class="menu-category mt-3">OTHERS</label>
+
+        <a href="/holidayscalender" class="menu-item">
+            <i class="bi bi-flag"></i> Holidays Calendar
+        </a>
+
+        <div class="menu-divider"></div>
+
+        <a href="javascript:void(0)" class="menu-item text-danger mt-2" @onclick="Logout">
+            <i class="bi bi-box-arrow-left"></i> Secure Logout
+        </a>
+
+    </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<main class="main-content">
+    @Body
+</main>
+
+<style>
+    .top-navbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 65px;
+        background: #ffffff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 20px;
+        z-index: 1000;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .brand-logo {
+        font-weight: 800;
+        font-size: 18px;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .menu-toggle-btn {
+        background: transparent;
+        border: none;
+        font-size: 28px;
+        color: #334155;
+        cursor: pointer;
+    }
+
+    .side-menu-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.6);
+        z-index: 1040;
+        opacity: 0;
+        visibility: hidden;
+        transition: 0.3s;
+    }
+
+    .side-menu-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .side-menu {
+        position: fixed;
+        top: 0;
+        right: -320px;
+        width: 300px;
+        height: 100vh;
+        background: #ffffff;
+        z-index: 1050;
+        transition: 0.3s;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .side-menu.open {
+        right: 0;
+    }
+
+    .side-menu-header {
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        padding: 30px 20px 20px;
+        color: white;
+        position: relative;
+    }
+
+    .close-menu-btn {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        font-size: 22px;
+        cursor: pointer;
+    }
+
+    .side-menu-body {
+        padding: 20px 0;
+        overflow-y: auto;
+    }
+
+    .menu-category {
+        font-size: 11px;
+        font-weight: 700;
+        color: #94a3b8;
+        padding: 0 25px;
+        margin-bottom: 5px;
+    }
+
+    .menu-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 25px;
+        color: #334155;
+        text-decoration: none;
+        font-weight: 600;
+        border-left: 4px solid transparent;
+    }
+
+    .menu-item:hover,
+    .menu-item.active {
+        background: #f8fafc;
+        color: #4f46e5;
+        border-left-color: #4f46e5;
+    }
+
+    .menu-item i {
+        font-size: 18px;
+        width: 22px;
+    }
+
+    .menu-divider {
+        height: 1px;
+        background: #e2e8f0;
+        margin: 15px 25px;
+    }
+
+    .main-content {
+        padding-top: 65px;
+    }
+
+    /* ── Update Banner ──────────────────────────────────── */
+    .update-banner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999;
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        color: white;
+        padding: 10px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        box-shadow: 0 4px 20px rgba(79, 70, 229, 0.5);
+        animation: slideDown 0.4s ease;
+    }
+
+    @@keyframes slideDown {
+        from {
+            transform: translateY(-100%);
+        }
+
+        to {
+            transform: translateY(0);
+        }
+    }
+
+    .update-banner-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .update-pulse {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #4ade80;
+        flex-shrink: 0;
+        animation: pulse-dot 1.5s infinite;
+    }
+
+    @@keyframes pulse-dot {
+
+        0%,
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        50% {
+            opacity: 0.5;
+            transform: scale(1.4);
+        }
+    }
+
+    .update-text {
+        font-size: 13px;
+    }
+
+    .update-banner-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .update-countdown {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.75);
+    }
+
+    .update-now-btn {
+        background: white;
+        color: #4f46e5;
+        border: none;
+        border-radius: 8px;
+        padding: 6px 14px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: transform 0.15s;
+    }
+
+    .update-now-btn:hover {
+        transform: scale(1.03);
+    }
+
+    .update-later-btn {
+        background: rgba(255, 255, 255, 0.15);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+
+    /* Shift top-navbar down when update banner is visible */
+    .top-navbar {
+        transition: top 0.3s;
+    }
+
+    /* APK disabled state */
+    .dl-disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+
+    .dl-android small {
+        font-size: 10px;
+        opacity: 0.85;
+        margin-left: 2px;
+    }
+
+    /* ── Refresh + Download row ──────────────────────────── */
+    .header-action-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 14px;
+        padding: 0 4px;
+    }
+
+    .hdr-btn {
+        flex: 1;
+        height: 36px;
+        border: none;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        text-decoration: none;
+        transition: transform 0.15s, opacity 0.18s;
+        white-space: nowrap;
+    }
+    .hdr-btn i { font-size: 14px; }
+    .hdr-btn:hover  { transform: translateY(-1px); opacity: 0.9; }
+    .hdr-btn:active { transform: scale(0.97); }
+
+    .hdr-refresh {
+        background: rgba(255,255,255,0.18);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.25);
+    }
+    .hdr-refresh:hover { background: rgba(255,255,255,0.3); }
+
+    .hdr-android {
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        color: #fff;
+    }
+
+    .hdr-ios {
+        background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+        color: #fff;
+    }
+
+    /* ── iOS Guide Modal ─────────────────────────────────── */
+    .ios-modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.7);
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+
+    .ios-modal {
+        background: #ffffff;
+        border-radius: 20px;
+        width: 100%;
+        max-width: 380px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25);
+    }
+
+    .ios-modal-header {
+        background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+        color: white;
+        padding: 18px 20px;
+        border-radius: 20px 20px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .ios-modal-title {
+        font-size: 16px;
+        font-weight: 700;
+    }
+
+    .ios-modal-close {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        font-size: 18px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .ios-modal-body {
+        padding: 20px;
+    }
+
+    /* QR Code */
+    .qr-section {
+        text-align: center;
+        margin-bottom: 16px;
+    }
+
+    .qr-img {
+        width: 160px;
+        height: 160px;
+        border-radius: 12px;
+        border: 3px solid #e2e8f0;
+        padding: 6px;
+        background: white;
+    }
+
+    .qr-label {
+        font-size: 12px;
+        color: #64748b;
+        margin-top: 6px;
+    }
+
+    .ios-divider {
+        text-align: center;
+        color: #94a3b8;
+        font-size: 11px;
+        font-weight: 600;
+        margin: 12px 0;
+        position: relative;
+    }
+
+    .ios-divider::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: #e2e8f0;
+    }
+
+    .ios-divider span {
+        background: white;
+        padding: 0 10px;
+        position: relative;
+    }
+
+    /* Steps */
+    .ios-steps {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .ios-step {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        background: #f8fafc;
+        border-radius: 10px;
+        padding: 10px 12px;
+    }
+
+    .step-num {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        color: white;
+        font-size: 12px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .step-text {
+        font-size: 13px;
+        color: #334155;
+        line-height: 1.4;
+    }
+
+    .step-note {
+        display: block;
+        font-size: 11px;
+        color: #94a3b8;
+        margin-top: 2px;
+    }
+
+    .ios-note {
+        background: #fef3c7;
+        border: 1px solid #fcd34d;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 12px;
+        color: #92400e;
+        margin-bottom: 14px;
+        line-height: 1.4;
+    }
+
+    .ios-copy-btn {
+        width: 100%;
+        padding: 12px;
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .ios-copy-btn:hover {
+        opacity: 0.9;
+    }
+</style>
+
+@code {
+    // ── State ──────────────────────────────────────────────────────────────
+    private bool IsMenuOpen = false;
+    private string EmployeeName = string.Empty;
+    private string EmployeeDepartment = string.Empty;
+    private string EmployeeId = string.Empty;
+
+    // iOS Guide Modal
+    private bool ShowIosModal = false;
+    private bool LinkCopied = false;
+    private string AppBaseUrl = string.Empty;
+    private string QrCodeUrl =>
+$"https://api.qrserver.com/v1/create-qr-code/?size=160x160&data={Uri.EscapeDataString(AppBaseUrl)}&bgcolor=ffffff&color=000000&margin=4";
+
+    // APK info (reserved for future size display)
+    private string ApkSizeMb = "";
+
+    // Version / Update check
+    private string? _knownVersion;
+    private bool ShowUpdateBanner = false;
+    private string NewVersionLabel = "";
+    private int UpdateCountdown = 30;
+    private CancellationTokenSource _versionCts = new();
+    private CancellationTokenSource _countdownCts = new();
+
+    // ── Init ───────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        EmployeeName = await JS.InvokeAsync<string>("localStorage.getItem", "empName") ?? "";
+        EmployeeDepartment = await JS.InvokeAsync<string>("localStorage.getItem", "empDept") ?? "";
+        EmployeeId = await JS.InvokeAsync<string>("localStorage.getItem", "empId") ?? "";
+        AppBaseUrl = NavManager.BaseUri.TrimEnd('/');
+
+        // Start background version polling loop (Task.Delay is reliable in Blazor WASM)
+        _ = VersionPollingLoop(_versionCts.Token);
+    }
+
+    // ── Version Polling Loop ───────────────────────────────────────────────
+    // Uses Task.Delay (backed by JS setTimeout) — works correctly in WASM.
+    // System.Timers.Timer is unreliable in single-threaded WASM environment.
+
+    private async Task VersionPollingLoop(CancellationToken ct)
+    {
+        // Step 1: wait 3 seconds then record baseline version (no banner on first load)
+        await Task.Delay(3_000, ct);
+        _knownVersion = await FetchVersion(ct);
+
+        // Step 2: poll every 30 seconds and compare
+        while (!ct.IsCancellationRequested)
+        {
+            await Task.Delay(30_000, ct);
+            if (ct.IsCancellationRequested) break;
+
+            var latest = await FetchVersion(ct);
+            if (latest != null && _knownVersion != null && latest != _knownVersion && !ShowUpdateBanner)
+            {
+                NewVersionLabel = latest;
+                ShowUpdateBanner = true;
+                UpdateCountdown = 30;
+                await InvokeAsync(StateHasChanged);
+
+                // Start countdown loop on UI thread
+                _ = CountdownLoop(_countdownCts.Token);
+            }
+        }
+    }
+
+    private async Task CountdownLoop(CancellationToken ct)
+    {
+        while (UpdateCountdown > 0 && !ct.IsCancellationRequested)
+        {
+            await Task.Delay(1_000, ct);
+            UpdateCountdown--;
+            await InvokeAsync(StateHasChanged);
+        }
+        if (!ct.IsCancellationRequested && ShowUpdateBanner)
+            await InvokeAsync(ApplyUpdate);
+    }
+
+    // Fetches version with cache-busting — browser must NOT cache this response
+    private async Task<string?> FetchVersion(CancellationToken ct = default)
+    {
+        try
+        {
+            var tick = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"api/version?t={tick}");
+            req.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue
+            {
+                NoCache = true,
+                NoStore = true
+            };
+            using var resp = await Http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return null;
+
+            var result = await resp.Content.ReadFromJsonAsync<VersionResponse>(cancellationToken: ct);
+            return result?.Version;
+        }
+        catch { return null; }
+    }
+
+    private async Task ApplyUpdate()
+    {
+        ShowUpdateBanner = false;
+        _countdownCts.Cancel();
+        await JS.InvokeVoidAsync("forceAppUpdate");
+    }
+
+    // ── iOS Guide ──────────────────────────────────────────────────────────
+
+    private void ToggleMenu() => IsMenuOpen = !IsMenuOpen;
+    private void OpenIosGuide() { LinkCopied = false; ShowIosModal = true; }
+    private void CloseIosGuide() => ShowIosModal = false;
+
+    private async Task CopyAppLink()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", AppBaseUrl);
+            LinkCopied = true;
+            StateHasChanged();
+            await Task.Delay(2500);
+            LinkCopied = false;
+            StateHasChanged();
+        }
+        catch
+        {
+            await JS.InvokeVoidAsync("alert", $"App link: {AppBaseUrl}");
+        }
+    }
+
+    // ── Auth ───────────────────────────────────────────────────────────────
+
+    private async Task Logout()
+    {
+        await JS.InvokeVoidAsync("localStorage.clear");
+        NavManager.NavigateTo("/", true);
+    }
+
+    private async Task ForceRefresh()
+    {
+        await JS.InvokeVoidAsync("forceAppUpdate");
+    }
+
+    // ── Cleanup ────────────────────────────────────────────────────────────
+
+    public async ValueTask DisposeAsync()
+    {
+        _versionCts.Cancel();
+        _versionCts.Dispose();
+        _countdownCts.Cancel();
+        _countdownCts.Dispose();
+        await Task.CompletedTask;
+    }
+
+    // ── Response Models ────────────────────────────────────────────────────
+
+    private class VersionResponse
+    {
+        public string? Version { get; set; }
+        public string? Label { get; set; }
+    }
+
+}

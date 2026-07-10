@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>SPOneHR</name>
+    </assembly>
+    <members>
+        <member name="T:SPOneHRApp.AppConstants">
+            <summary>
+            Central config — update ServerUrl before building the APK.
+            </summary>
+        </member>
+        <member name="T:SPOneHRApp.BootReceiver">
+            <summary>
+            Restarts the WFH tracking service if the phone reboots during an active WFH session.
+            </summary>
+        </member>
+        <member name="T:SPOneHRApp.SPOneHRWebChromeClient">
+            <summary>
+            Custom WebChromeClient â€” auto-grants GPS and camera permissions
+            to the Blazor PWA page so it can use selfie capture and location.
+            </summary>
+        </member>
+        <member name="T:SPOneHRApp.WFHJavascriptBridge">
+            <summary>
+            Injected into the WebView as window.AndroidBridge.
+            The existing wfhTracking.js calls:
+              window.AndroidBridge.startNativeTracking(empId)
+              window.AndroidBridge.stopNativeTracking()
+              window.AndroidBridge.isNativeApp()
+              window.AndroidBridge.getDeviceInfo()
+            These bridge calls start/stop the WFHLocationService background GPS service.
+            </summary>
+        </member>
+        <member name="M:SPOneHRApp.WFHJavascriptBridge.DownloadFile(System.String,System.String,System.String)">
+            <summary>
+            Called by window.downloadFile() in the web app when running inside the APK.
+            Saves the base64-encoded file to the Android Downloads folder and shows a toast.
+            </summary>
+        </member>
+        <member name="T:SPOneHRApp.Resource">
+            <summary>
+            Android Resource Designer class.
+            Exposes the Android Resource designer assembly into the project Namespace.
+            </summary>
+        </member>
+    </members>
+</doc>

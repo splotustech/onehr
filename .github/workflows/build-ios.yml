@@ -1,0 +1,51 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install MAUI iOS workload
+        run: dotnet workload install ios maui-ios --skip-sign-check
+
+      - name: Restore
+        run: dotnet restore MauiApp/MauiApp.csproj
+
+      - name: Build iOS IPA
+        run: |
+          dotnet publish MauiApp/MauiApp.csproj \
+            -f net9.0-ios \
+            -c Release \
+            -r ios-arm64 \
+            -p:BuildIpa=true \
+            -p:EnableCodeSigning=false \
+            -p:CodesignKey="" \
+            -p:CodesignProvision="" \
+            -o ./ios-output
+
+      - name: Find IPA
+        run: find . -name "*.ipa" -o -name "*.app" | head -20
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpOneHR-iOS-v${{ github.run_number }}
+          path: |
+            ios-output/**/*.ipa
+            MauiApp/bin/Release/net9.0-ios/**/*.ipa
+            ios-output/**/*.app
+          if-no-files-found: warn
+          retention-days: 30

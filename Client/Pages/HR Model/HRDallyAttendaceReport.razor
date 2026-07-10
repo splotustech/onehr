@@ -1,0 +1,1448 @@
+﻿@page "/hr_daily_attendance"
+@using SMART_HRMS_SYSTEM.Shared.ViewModel
+@using SMART_HRMS_SYSTEM.Shared.Models
+@using OfficeOpenXml
+@using System.IO;
+@using System.Data;
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager NavManager
+
+<div class="report-wrapper">
+    <div class="report-container">
+
+        <!-- Header -->
+        <div class="report-header">
+            <h2>Attendance Report</h2>
+            <p>Track and manage employee attendance across all departments.</p>
+        </div>
+
+        @if (ReportType == "Daily")
+        {
+            <div class="stats-row mb-4">
+
+                <div class="stat-card stat-total shadow-sm">
+                    <div class="stat-icon"><i class="bi bi-people"></i></div>
+                    <div class="stat-details">
+                        <p class="stat-title">Total</p>
+                        <h3 class="stat-count">@TotalEmployees</h3>
+                    </div>
+                </div>
+
+                <div class="stat-card stat-present shadow-sm">
+                    <div class="stat-icon"><i class="bi bi-check"></i></div>
+                    <div class="stat-details">
+                        <p class="stat-title">Present</p>
+                        <h3 class="stat-count">@PresentCount</h3>
+                    </div>
+                </div>
+
+                <div class="stat-card stat-late shadow-sm">
+                    <div class="stat-icon"><i class="bi bi-clock"></i></div>
+                    <div class="stat-details">
+                        <p class="stat-title">Late</p>
+                        <h3 class="stat-count">@LateCount</h3>
+                    </div>
+                </div>
+
+                <div class="stat-card stat-absent shadow-sm">
+                    <div class="stat-icon"><i class="bi bi-x"></i></div>
+                    <div class="stat-details">
+                        <p class="stat-title">Absent</p>
+                        <h3 class="stat-count">@AbsentCount</h3>
+                    </div>
+                </div>
+
+            </div>
+        }
+
+        <!-- Filter Card -->
+        <div class="filter-card shadow-sm mb-4">
+            <div class="filter-row">
+
+                <!-- Report Type Selection (Daily / Monthly) -->
+                <div class="filter-item">
+                    <label class="filter-label">REPORT TYPE</label>
+                    <div class="select-wrapper">
+                        <select class="form-select custom-select" value="@ReportType" @onchange="OnReportTypeChanged">
+                            <option value="Daily">Daily Report</option>
+                            <option value="Monthly">Monthly Report</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- DYNAMIC DATE OR MONTH PICKER -->
+                <div class="filter-item">
+                    <label class="filter-label">SELECT @(ReportType == "Daily" ? "DATE" : "MONTH")</label>
+                    <div class="select-wrapper">
+                        @if (ReportType == "Daily")
+                        {
+                            <input type="date" class="form-control custom-select"
+                                   value="@SelectedDate.ToString("yyyy-MM-dd")" @onchange="OnDateChanged" />
+                        }
+                        else
+                        {
+                            <input type="month" class="form-control custom-select" value="@SelectedMonth"
+                                   @onchange="OnMonthChanged" />
+                        }
+                    </div>
+                </div>
+
+                <!-- Department -->
+                <div class="filter-item">
+                    <label class="filter-label">DEPARTMENT</label>
+                    <div class="select-wrapper">
+                        <select class="form-select custom-select" value="@FilterDepartment"
+                                @onchange="OnDepartmentChanged">
+                            <option value="All">All Departments</option>
+                            @foreach (var dept in GetDepartments())
+                            {
+                                <option value="@dept">@dept</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Status (Only for Daily Report) -->
+                @if (ReportType == "Daily")
+                {
+                    <div class="filter-item">
+                        <label class="filter-label">STATUS</label>
+                        <div class="select-wrapper">
+                            <select class="form-select custom-select" value="@FilterStatus" @onchange="OnStatusChanged">
+                                <option value="All">All Statuses</option>
+                                <option value="Present">Present</option>
+                                <option value="Late">Late</option>
+                                <option value="Absent">Absent</option>
+                            </select>
+                        </div>
+                    </div>
+                }
+
+                <!-- Search -->
+                <div class="filter-item">
+                    <label class="filter-label">SEARCH</label>
+                    <div class="search-box">
+                        <i class="bi bi-search search-icon"></i>
+                        <input class="form-control custom-select pl-search" placeholder="Search Name..."
+                               style="width:70%" value="@SearchText" @oninput="OnSearchInput" />
+                    </div>
+                </div>
+
+                <!-- Action Button -->
+                <div class="filter-item btn-item">
+                    <label class="filter-label d-none d-md-block">&nbsp;</label>
+                    <button class="btn-search w-100" @onclick="Reset" disabled="@IsLoading">
+                        @if (IsLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span> <span>Loading...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-arrow-clockwise d-none d-md-inline me-2"></i> <span>Refresh</span>
+                        }
+                    </button>
+                </div>
+
+                @if (ReportType != "Daily")
+                {
+                    <div class="export-btn-wrapper">
+                        <button class="btn-export" @onclick="ExportExcel" disabled="@IsExcelLoading">
+                            @if (IsExcelLoading)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span> <span>Loading...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-file-earmark-excel me-2"></i> <span>Summary Report</span>
+                            }
+                        </button>
+                    </div>
+                }
+                @if (ReportType != "Daily")
+                {
+                    <div class="export-btn-wrapper">
+                        <button class="btn-export" @onclick="ExportDayWiseExcel" disabled="@IsExcelLoading">
+                            @if (IsExcelLoading)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span> <span>Loading...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-file-earmark-excel me-2"></i> <span>Day Wise Report</span>
+                            }
+                        </button>
+                    </div>
+                }
+
+            </div>
+        </div>
+
+        <div class="report-table-wrapper">
+            @if (IsLoading)
+            {
+                <div class="empty-state shadow-sm">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+                    <h5>Loading Data...</h5>
+                    <p>Fetching attendance records.</p>
+                </div>
+            }
+            else if (ReportType == "Monthly")
+            {
+                <!-- MONTHLY TABLE -->
+                @if (!FilteredMonthlyList.Any())
+                {
+                    <div class="empty-state shadow-sm">
+                        <div class="empty-icon placeholder-glow"><i class="bi bi-warning text-warning"></i></div>
+                        <h5>No Monthly Records Found</h5>
+                        <p>Try changing your filters.</p>
+                    </div>
+                }
+                else
+                {
+                    <table class="table modern-table">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Department</th>
+                                <th>Present</th>
+                                <th>Absent</th>
+                                <th>Late</th>
+                                <th>Paid Leave</th>
+                                <th>WeekOff</th>
+                                <th>Half Day</th>
+                                <th>Early Depature</th>
+                                <th>Report</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in FilteredMonthlyList)
+                            {
+                                <tr>
+                                    <td data-label="Employee">
+                                        <div class="employee-cell text-value">
+                                            <div class="avatar">@GetInitials(r.EmployeeName)</div>
+                                            <span class="fw-bold">@r.EmployeeName</span>
+                                        </div>
+                                    </td>
+                                    <td data-label="Department"><span class="text-value text-muted fw-semibold">@r.Department</span>
+                                    </td>
+                                    <td data-label="Present"><span class="text-value text-success fw-bold">@r.Present</span></td>
+                                    <td data-label="Absent"><span class="text-value text-danger fw-bold">@r.Absent</span></td>
+                                    <td data-label="Late"><span class="text-value text-warning fw-bold">@r.LateMark</span></td>
+                                    <td data-label="Paid Leave"><span class="text-value text-secondary fw-bold">@r.PaidLeave</span>
+                                    </td>
+                                    <td data-label="WeekOff"><span class="text-value text-secondary fw-bold">@r.WeekOff</span></td>
+                                    <td data-label="Half Day"><span class="text-value text-info fw-bold">@r.HalfDay</span></td>
+                                    <td data-label="Early Depature"><span
+                                        class="text-value text-primary fw-bold">@r.EarlyDeparture</span></td>
+                                        <td data-label="Report">
+                                            <span class="text-value text-primary fw-bold">
+                                                <button class="btn-export" @onclick="() => ExportVerticalExcel(r.EmployeeId)"
+                                                        disabled="@IsExcelLoading">
+                                                    @if (IsExcelLoading)
+                                                    {
+                                                        <span class="spinner-border spinner-border-sm me-2"></span> <span>Loading...</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <i class="bi bi-file-earmark-excel me-2"></i> <span>Summary Report</span>
+                                                    }
+                                                </button>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                }
+            else
+                {
+                    <!-- DAILY TABLE -->
+                    @if (!FilteredRecords.Any())
+                    {
+                        <div class="empty-state shadow-sm">
+                            <div class="empty-icon placeholder-glow"><i class="bi bi-warning text-warning"></i></div>
+                            <h5>No Records Found</h5>
+                            <p>Try changing your filters.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <table class="table modern-table">
+                            <thead>
+                                <tr>
+                                    <th>Employee</th>
+                                    <th>Department</th>
+                                    <th>Punch In</th>
+                                    <th>Punch Out</th>
+                                    <th>Total Hrs</th>
+                                    <th>Mode</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var r in FilteredRecords)
+                                {
+                                    <tr>
+                                        <td data-label="Employee">
+                                            <div class="employee-cell text-value">
+                                                <div class="avatar">@GetInitials(r.EmpName)</div>
+                                                <span class="fw-bold">@r.EmpName</span>
+                                            </div>
+                                        </td>
+                                        <td data-label="Department"><span class="text-value text-muted fw-semibold">@r.Department</span>
+                                        </td>
+                                        <td data-label="Punch In">
+                                            <span class="text-value @(r.PunchInTime.HasValue ? "badge-in" : "text-blank")">
+                                                @(r.PunchInTime?.ToString("hh:mm tt") ?? "-")
+                                            </span>
+                                        </td>
+                                        <td data-label="Punch Out">
+                                            <span class="text-value @(r.PunchOutTime.HasValue ? "badge-out" : "text-blank")">
+                                                @(r.PunchOutTime?.ToString("hh:mm tt") ?? "-")
+                                            </span>
+                                        </td>
+                                        <td data-label="Total Hrs"><span class="text-value text-hours">@r.TotalHours</span></td>
+                                        <td data-label="Mode"><span class="text-value @GetModeClass(r.WorkMode)">@r.WorkMode</span></td>
+                                        <td data-label="Status">
+                                            <span class="text-value status-badge @GetStatusCss(r.Status)">
+                                                @r.Status
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* CSS अगदी आधीसारखेच आहे (डेस्कटॉप डिझाईन) */
+        .report-wrapper {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #f3f4f6 0%, #fefefe 100%);
+            padding: 30px 15px;
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+        }
+
+        .report-container {
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        .report-header {
+            text-align: left;
+            margin-bottom: 25px;
+        }
+
+        .report-header h2 {
+            font-weight: 800;
+            font-size: 26px;
+            color: #0f172a;
+            margin-bottom: 5px;
+        }
+
+        .report-header p {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 15px;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            padding-bottom: 5px;
+        }
+
+        .stats-row::-webkit-scrollbar {
+            display: none;
+        }
+
+        .stat-card {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 16px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            border: none;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .stat-total .stat-icon {
+            background: #eff6ff;
+            color: #4f46e5;
+        }
+
+        .stat-present .stat-icon {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        .stat-late .stat-icon {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .stat-absent .stat-icon {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .stat-title {
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin: 0 0 2px 0;
+        }
+
+        .stat-count {
+            font-size: 24px;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        .filter-card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 20px;
+            border: none;
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .filter-item {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .btn-item {
+            flex: 0.5;
+            min-width: 120px;
+        }
+
+        .filter-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .custom-select {
+            width: 100%;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            padding: 10px 9px;
+            font-weight: 500;
+            font-size: 14px;
+            background: #f8fafc;
+            color: #0f172a;
+            transition: all 0.2s ease;
+        }
+
+        .custom-select:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            background: #fff;
+            outline: none;
+        }
+
+        .btn-search {
+            background: #f8fafc;
+            color: #0f172a;
+            border: 1px solid #e2e8f0;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-search:hover:not(:disabled) {
+            background: #e2e8f0;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+        }
+
+        .pl-search {
+            padding-left: 35px;
+        }
+
+        .export-btn-wrapper {
+            text-align: right;
+            margin-bottom: 15px;
+        }
+
+        .btn-export {
+            background: linear-gradient(135deg, #16a34a, #22c55e);
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            transition: 0.3s;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-export:hover {
+            background: linear-gradient(135deg, #15803d, #16a34a);
+            transform: translateY(-1px);
+        }
+
+        .report-table-wrapper {
+            background: transparent;
+        }
+
+        .modern-table {
+            width: 100%;
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+            margin-bottom: 0;
+        }
+
+        .modern-table thead {
+            background: #f8fafc;
+        }
+
+        .modern-table th {
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            padding: 16px;
+            text-transform: uppercase;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .modern-table td {
+            padding: 16px;
+            font-size: 14px;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            color: #334155;
+        }
+
+        .modern-table tbody tr:hover {
+            background: #f8fafc;
+        }
+
+        .employee-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6366f1, #3b82f6);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .badge-in {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .badge-out {
+            color: #ef4444;
+            font-weight: 600;
+        }
+
+        .badge-mode {
+            color: #0ea5e9;
+            font-weight: 600;
+        }
+
+        .text-hours {
+            color: #475569;
+            font-weight: 700;
+        }
+
+        .text-blank {
+            color: #cbd5e1;
+            font-weight: 400;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 700;
+            display: inline-block;
+            text-align: center;
+            min-width: 80px;
+        }
+
+        .bg-present {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .bg-late {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .bg-absent {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .bg-secondary {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: white;
+            border-radius: 16px;
+        }
+
+        /* =========================================
+       📱 MOBILE RESPONSIVE (Updated for List View)
+    ========================================= */
+        @@media (max-width: 768px) {
+            .report-wrapper {
+                padding: 15px 10px;
+            }
+
+            .filter-row {
+                flex-wrap: wrap;
+            }
+
+            .filter-item {
+                flex: 1 1 45%;
+            }
+
+            .btn-item {
+                flex: 1 1 100%;
+                margin-top: 5px;
+            }
+
+            .custom-select {
+                padding: 8px 10px;
+                font-size: 13px;
+            }
+
+            .stat-card {
+                flex-direction: column;
+                text-align: center;
+                gap: 8px;
+            }
+
+            .report-table-wrapper {
+                background: transparent;
+                box-shadow: none;
+            }
+
+            .modern-table thead {
+                display: none;
+            }
+
+            .modern-table,
+            .modern-table tbody,
+            .modern-table tr,
+            .modern-table td {
+                display: block;
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            .modern-table tr {
+                margin-bottom: 15px;
+                background: white;
+                padding: 15px;
+                border-radius: 16px;
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+                border: none;
+            }
+
+            .modern-table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px 0;
+                border: none;
+                font-size: 13px;
+                gap: 15px;
+            }
+
+            .modern-table td::before {
+                content: attr(data-label);
+                font-weight: 500;
+                color: #64748b;
+                min-width: 90px;
+                text-transform: uppercase;
+                font-size: 11px;
+            }
+
+            .text-value {
+                text-align: right;
+                word-wrap: break-word;
+                white-space: normal;
+                max-width: 65%;
+            }
+
+            .employee-cell {
+                justify-content: flex-end;
+            }
+        }
+    </style>
+
+@code {
+    private bool IsLoading = false;
+    private bool IsExcelLoading = false;
+    private string EmployeeName = "";
+
+    // Report Type (Daily or Monthly)
+    private string ReportType = "Daily";
+
+    // Dates variables
+    private DateTime SelectedDate = DateTime.Today;
+    private string SelectedMonth = DateTime.Today.ToString("yyyy-MM");
+
+    // Stats
+    private int TotalEmployees, PresentCount, LateCount, AbsentCount;
+    private Decimal MonthPresentCount, MonthLateCount, MonthAbsentCount, MonthPaidLeaveCount, MonthWeekOffCount,
+MonthHalfDayCount, MonthEarlyOutCount;
+
+    // Filters
+    private string SearchText = "";
+    private string FilterDepartment = "All";
+    private string FilterStatus = "All";
+
+    // Daily Data
+    private List<HrAttendanceModel> AllRecords = new();
+    private List<HrAttendanceModel> FilteredRecords = new();
+
+    // Monthly Data
+    private List<MonthlySummaryModel> MonthlyList = new();
+    private List<MonthlySummaryModel> FilteredMonthlyList = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                EmployeeName = await JS.InvokeAsync<string>("localStorage.getItem", "empName");
+                if (string.IsNullOrEmpty(EmployeeName)) NavManager.NavigateTo("/", true);
+                StateHasChanged();
+            }
+            catch { }
+        }
+    }
+
+    private async Task LoadData()
+    {
+        IsLoading = true;
+        try
+        {
+            await Task.Delay(300);
+
+            if (ReportType == "Daily")
+            {
+                string url = $"api/attendance/AttendacereportByDate?ReportDate={SelectedDate:yyyy-MM-dd}";
+                AllRecords = await Http.GetFromJsonAsync<List<HrAttendanceModel>>(url) ?? new();
+
+                CalculateStats();
+                ApplyFilters(); // Daily Filters Apply करणे
+            }
+            else
+            {
+                await LoadMonthlyList();
+
+                // Monthly Stats
+                TotalEmployees = MonthlyList.Count;
+                MonthPresentCount = MonthlyList.Sum(x => x.Present);
+                MonthLateCount = MonthlyList.Sum(x => x.LateMark);
+                MonthAbsentCount = MonthlyList.Sum(x => x.Absent);
+
+                ApplyFilters(); // Monthly डेटा लोड झाल्यावरही Filter Apply करणे गरजेचे आहे
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task LoadMonthlyList()
+    {
+        var year = SelectedMonth.Split('-')[0];
+        var month = SelectedMonth.Split('-')[1];
+
+        MonthlyList = await Http.GetFromJsonAsync<List<MonthlySummaryModel>>(
+            $"api/attendance/MonthlySummaryList?Year={year}&Month={month}"
+        ) ?? new();
+    }
+
+    private void CalculateStats()
+    {
+        TotalEmployees = AllRecords.Count;
+        PresentCount = AllRecords.Count(x => x.Status == "Present" || x.Status == "Late");
+        LateCount = AllRecords.Count(x => x.Status == "Late");
+        AbsentCount = AllRecords.Count(x => x.Status == "Absent");
+    }
+
+    // डायनॅमिक डिपार्टमेंट ड्रॉपडाऊन
+    private IEnumerable<string> GetDepartments()
+    {
+        if (ReportType == "Daily")
+            return AllRecords.Where(x => !string.IsNullOrEmpty(x.Department)).Select(x => x.Department).Distinct().OrderBy(x => x);
+        else
+            return MonthlyList.Where(x => !string.IsNullOrEmpty(x.Department)).Select(x => x.Department).Distinct().OrderBy(x => x);
+    }
+
+    private void Reset()
+    {
+        SearchText = "";
+        FilterDepartment = "All";
+        FilterStatus = "All";
+        ApplyFilters();
+    }
+
+    private async Task OnReportTypeChanged(ChangeEventArgs e)
+    {
+        ReportType = e.Value?.ToString() ?? "Daily";
+        SearchText = "";
+        FilterDepartment = "All";
+        FilterStatus = "All";
+        await LoadData();
+    }
+
+    private async Task OnDateChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var parsedDate))
+        {
+            SelectedDate = parsedDate;
+            await LoadData();
+        }
+    }
+
+    private async Task OnMonthChanged(ChangeEventArgs e)
+    {
+        SelectedMonth = e.Value?.ToString() ?? DateTime.Today.ToString("yyyy-MM");
+        await LoadData();
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        SearchText = e.Value?.ToString() ?? string.Empty;
+        ApplyFilters();
+    }
+
+    private void OnDepartmentChanged(ChangeEventArgs e)
+    {
+        FilterDepartment = e.Value?.ToString() ?? "All";
+        ApplyFilters();
+    }
+
+    private void OnStatusChanged(ChangeEventArgs e)
+    {
+        FilterStatus = e.Value?.ToString() ?? "All";
+        ApplyFilters();
+    }
+
+    // अपडेटेड फिल्टर लॉजिक (Daily आणि Monthly दोन्हीसाठी)
+    private async Task ApplyFilters()
+    {
+        if (ReportType == "Daily")
+        {
+            var q = AllRecords.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(SearchText))
+                q = q.Where(x => !string.IsNullOrEmpty(x.EmpName) && x.EmpName.Contains(SearchText,
+StringComparison.OrdinalIgnoreCase));
+
+            if (FilterDepartment != "All")
+                q = q.Where(x => x.Department == FilterDepartment);
+
+            if (FilterStatus != "All")
+                q = q.Where(x => x.Status == FilterStatus);
+
+            FilteredRecords = q.ToList();
+        }
+        else // Monthly Report Filters
+        {
+            var q = MonthlyList.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(SearchText))
+                q = q.Where(x => !string.IsNullOrEmpty(x.EmployeeName) && x.EmployeeName.Contains(SearchText,
+StringComparison.OrdinalIgnoreCase));
+
+            if (FilterDepartment != "All")
+                q = q.Where(x => x.Department == FilterDepartment);
+
+            FilteredMonthlyList = q.ToList();
+        }
+        TotalEmployees = FilteredRecords.Count;
+        PresentCount = FilteredRecords.Count(x => x.Status == "Present" || x.Status == "Late");
+        LateCount = FilteredRecords.Count(x => x.Status == "Late");
+        AbsentCount = FilteredRecords.Count(x => x.Status == "Absent");
+        StateHasChanged();
+    }
+
+    // Dynamic Classes
+    private string GetModeClass(string mode) => mode == "-" ? "text-blank" : "badge-mode";
+    private string GetStatusCss(string status) => status switch
+    {
+        "Present" => "bg-present",
+        "Late" => "bg-late",
+        "Absent" => "bg-absent",
+        _ => "bg-secondary"
+    };
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "U";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 1 ? parts[0].Substring(0, 1).ToUpper() : (parts[0].Substring(0, 1) + parts[1].Substring(0,
+1)).ToUpper();
+    }
+
+    private async Task ExportExcel()
+    {
+        try
+        {
+            IsExcelLoading = true;
+            StateHasChanged();
+
+            var data = MonthlyList;
+
+            OfficeOpenXml.ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
+
+            using (var package = new OfficeOpenXml.ExcelPackage())
+            {
+                var ws = package.Workbook.Worksheets.Add("Monthly Report");
+
+                int row = 1;
+
+                // =========================
+                // ✅ TITLE
+                // =========================
+                ws.Cells[row, 1].Value = $"Monthly Attendance Report - {SelectedMonth}";
+                ws.Cells[row, 1, row, 10].Merge = true;
+                ws.Cells[row, 1].Style.Font.Size = 16;
+                ws.Cells[row, 1].Style.Font.Bold = true;
+                ws.Cells[row, 1].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+
+                row += 2;
+
+                // =========================
+                // ✅ HEADER
+                // =========================
+                ws.Cells[row, 1].Value = "Month";
+                ws.Cells[row, 2].Value = "Employee Name";
+                ws.Cells[row, 3].Value = "Present";
+                ws.Cells[row, 4].Value = "Absent";
+                ws.Cells[row, 5].Value = "Late Mark";
+                ws.Cells[row, 6].Value = "Paid Leave";
+                ws.Cells[row, 7].Value = "Week Off";
+                ws.Cells[row, 8].Value = "Half Day";
+                ws.Cells[row, 9].Value = "Early Departure";
+                ws.Cells[row, 10].Value = "Attendance %";
+
+                using (var header = ws.Cells[row, 1, row, 10])
+                {
+                    header.Style.Font.Bold = true;
+                    header.Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+                    header.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                    header.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.DarkBlue);
+                    header.Style.Font.Color.SetColor(System.Drawing.Color.White);
+                }
+
+                // Freeze header
+                ws.View.FreezePanes(row + 1, 1);
+
+                row++;
+
+                // =========================
+                // ✅ DATA
+                // =========================
+                foreach (var item in data)
+                {
+                    ws.Cells[row, 1].Value = SelectedMonth;
+                    ws.Cells[row, 2].Value = item.EmployeeName;
+                    ws.Cells[row, 3].Value = item.Present;
+                    ws.Cells[row, 4].Value = item.Absent;
+                    ws.Cells[row, 5].Value = item.LateMark;
+                    ws.Cells[row, 6].Value = item.PaidLeave;
+                    ws.Cells[row, 7].Value = item.WeekOff;
+                    ws.Cells[row, 8].Value = item.HalfDay;
+                    ws.Cells[row, 9].Value = item.EarlyDeparture;
+
+                    // ✅ Attendance %
+                    decimal total = item.Present + item.Absent + item.PaidLeave + item.WeekOff;
+                    decimal percent = total > 0 ? (item.Present / total) : 0;
+
+                    ws.Cells[row, 10].Value = percent;
+                    ws.Cells[row, 10].Style.Numberformat.Format = "0.00%";
+
+                    // Center align
+                    ws.Cells[row, 3, row, 10].Style.HorizontalAlignment =
+                        OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+
+                    // 🎨 Color Coding
+                    ws.Cells[row, 3].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                    ws.Cells[row, 3].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightGreen);
+
+                    ws.Cells[row, 4].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                    ws.Cells[row, 4].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightCoral);
+
+                    ws.Cells[row, 5].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                    ws.Cells[row, 5].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.Khaki);
+
+                    row++;
+                }
+
+                int dataEndRow = row - 1;
+
+                // =========================
+                // ✅ BORDERS
+                // =========================
+                var table = ws.Cells[3, 1, dataEndRow, 10];
+
+                table.Style.Border.Top.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+                table.Style.Border.Bottom.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+                table.Style.Border.Left.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+                table.Style.Border.Right.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+
+                // =========================
+                // ✅ FILTER
+                // =========================
+                ws.Cells[3, 1, dataEndRow, 10].AutoFilter = true;
+
+                // =========================
+                // ✅ AUTO FIT
+                // =========================
+                ws.Cells.AutoFitColumns();
+
+                // =========================
+                // ✅ DOWNLOAD
+                // =========================
+                var bytes = package.GetAsByteArray();
+                var base64 = Convert.ToBase64String(bytes);
+
+                await JS.InvokeVoidAsync("downloadFile",
+                    $"MonthlyReport_{SelectedMonth}.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    base64);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Excel Error: {ex.Message}");
+        }
+        finally
+        {
+            IsExcelLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExportVerticalExcel(int EmployeeId)
+    {
+        try
+        {
+            IsExcelLoading = true;
+            StateHasChanged();
+
+            var data = MonthlyList.Where(t => t.EmployeeId == EmployeeId).ToList();
+
+            OfficeOpenXml.ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
+
+            using (var package = new OfficeOpenXml.ExcelPackage())
+            {
+                var ws = package.Workbook.Worksheets.Add("Employee Report");
+
+                // --- 1. Column A (Labels) ---
+                ws.Cells[1, 1].Value = "Month";
+                ws.Cells[2, 1].Value = "Employee Name";
+                ws.Cells[3, 1].Value = "Present";
+                ws.Cells[4, 1].Value = "Absent";
+                ws.Cells[5, 1].Value = "Late Mark";
+                ws.Cells[6, 1].Value = "Paid Leave";
+                ws.Cells[7, 1].Value = "Week Off";
+                ws.Cells[8, 1].Value = "Half Day";
+                ws.Cells[9, 1].Value = "Early Departure";
+
+                using (var range = ws.Cells["A1:A9"])
+                {
+                    range.Style.Font.Bold = true;
+                    range.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                    range.Style.Fill.BackgroundColor.SetColor(System.Drawing.ColorTranslator.FromHtml("#D3D3D3"));
+                }
+
+                int col = 2;
+
+                foreach (var item in data)
+                {
+                    ws.Cells[1, col].Value = SelectedMonth;
+                    ws.Cells[2, col].Value = item.EmployeeName;
+                    ws.Cells[3, col].Value = item.Present;
+                    ws.Cells[4, col].Value = item.Absent;
+                    ws.Cells[5, col].Value = item.LateMark;
+                    ws.Cells[6, col].Value = item.PaidLeave;
+                    ws.Cells[7, col].Value = item.WeekOff;
+                    ws.Cells[8, col].Value = item.HalfDay;
+                    ws.Cells[9, col].Value = item.EarlyDeparture;
+
+                    using (var range = ws.Cells[3, col, 9, col])
+                    {
+                        range.Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+                    }
+
+                    col++;
+                }
+
+                ws.Cells.AutoFitColumns();
+
+                var bytes = package.GetAsByteArray();
+                var base64 = Convert.ToBase64String(bytes);
+
+                await JS.InvokeVoidAsync("downloadFile",
+                    $"EmployeeReport_{data.FirstOrDefault().EmployeeName}-{SelectedMonth}.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    base64);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Excel Error: {ex.Message}");
+        }
+        finally
+        {
+            IsExcelLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private List<DayWiseModel> DayWiseList = new();
+
+    private async Task LoadDayWise()
+    {
+        var year = SelectedMonth.Split('-')[0];
+        var month = SelectedMonth.Split('-')[1];
+
+        DayWiseList = await Http.GetFromJsonAsync<List<DayWiseModel>>(
+            $"api/attendance/EmployeeMonthlyDayWiseReport?Year={year}&Month={month}"
+        ) ?? new();
+    }
+    private async Task ExportDayWiseExcel()
+    {
+        try
+        {
+            IsExcelLoading = true;
+            StateHasChanged();
+
+            OfficeOpenXml.ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
+
+            await LoadDayWise();
+
+            using (var package = new OfficeOpenXml.ExcelPackage())
+            {
+                var ws = package.Workbook.Worksheets.Add("Day Wise Report");
+
+                int year = int.Parse(SelectedMonth.Split('-')[0]);
+                int month = int.Parse(SelectedMonth.Split('-')[1]);
+                int totalDays = DateTime.DaysInMonth(year, month);
+
+                int row = 1;
+
+                // =========================
+                // ✅ TITLE
+                // =========================
+                ws.Cells[row, 1].Value = $"Attendance Report - {SelectedMonth}";
+                ws.Cells[row, 1, row, totalDays + 1].Merge = true;
+                ws.Cells[row, 1].Style.Font.Size = 16;
+                ws.Cells[row, 1].Style.Font.Bold = true;
+                ws.Cells[row, 1].Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+
+                row += 2;
+
+                // =========================
+                // ✅ HEADER
+                // =========================
+                ws.Cells[row, 1].Value = "Employee Name";
+
+                for (int d = 1; d <= totalDays; d++)
+                {
+                    ws.Cells[row, d + 1].Value = d;
+                }
+
+                // Header Style
+                using (var header = ws.Cells[row, 1, row, totalDays + 1])
+                {
+                    header.Style.Font.Bold = true;
+                    header.Style.Font.Size = 12;
+                    header.Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+                    header.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                    header.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.DarkBlue);
+                    header.Style.Font.Color.SetColor(System.Drawing.Color.White);
+                }
+
+                // Freeze header
+                ws.View.FreezePanes(row + 1, 2);
+
+                row++;
+
+                // =========================
+                // ✅ DATA
+                // =========================
+                foreach (var emp in DayWiseList)
+                {
+                    ws.Cells[row, 1].Value = emp.EmployeeName;
+
+                    for (int d = 0; d < emp.Days.Count; d++)
+                    {
+                        var cell = ws.Cells[row, d + 2];
+                        var value = emp.Days[d];
+
+                        cell.Value = value;
+
+                        // 🎨 Color Coding
+                        if (value == "P")
+                        {
+                            cell.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                            cell.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightGreen);
+                        }
+                        else if (value == "A")
+                        {
+                            cell.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                            cell.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightCoral);
+                        }
+                        else if (value == "L")
+                        {
+                            cell.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                            cell.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.Khaki);
+                        }
+                        // ── Full Day Paid Leaves ──────────────────────────
+                        else if (value == "CL") // Casual Leave
+                        {
+                            cell.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                            cell.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.Orange);
+                            cell.Style.Font.Color.SetColor(System.Drawing.Color.White);
+                            cell.Style.Font.Bold = true;
+                        }
+                        else if (value == "SL") // Sick Leave
+                        {
+                            cell.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                            cell.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.HotPink);
+                            cell.Style.Font.Color.SetColor(System.Drawing.Color.White);
+                            cell.Style.Font.Bold = true;
+                        }
+                        else if (value == "PL") // Plan Leave
+                        {
+                            cell.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                            cell.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.MediumPurple);
+                            cell.Style.Font.Color.SetColor(System.Drawing.Color.White);
+                            cell.Style.Font.Bold = true;
+                        }
+                        // ── Half Day Paid Leaves ─────────────────────────
+                        else if (value == "HCL") // Half Day Casual Leave
+                        {
+                            cell.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                            cell.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.SandyBrown);
+                            cell.Style.Font.Color.SetColor(System.Drawing.Color.White);
+                            cell.Style.Font.Bold = true;
+                        }
+                        else if (value == "HSL") // Half Day Sick Leave
+                        {
+                            cell.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                            cell.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightPink);
+                            cell.Style.Font.Bold = true;
+                        }
+                        else if (value == "HPL") // Half Day Plan Leave
+                        {
+                            cell.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                            cell.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.Plum);
+                            cell.Style.Font.Bold = true;
+                        }
+                        // ── Unpaid Half Day ───────────────────────────────
+                        else if (value == "UH") // Unpaid Half Day
+                        {
+                            cell.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                            cell.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightSkyBlue);
+                            cell.Style.Font.Bold = true;
+                        }
+
+                        cell.Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+                    }
+
+                    row++;
+                }
+
+                int dataEndRow = row - 1;
+
+                // =========================
+                // ✅ COLUMN STYLE
+                // =========================
+                ws.Column(1).Width = 25;
+                ws.Column(1).Style.Font.Bold = true;
+
+                ws.Cells[1, 1, dataEndRow, totalDays + 1].AutoFitColumns();
+
+                // =========================
+                // ✅ BORDERS
+                // =========================
+                var tableRange = ws.Cells[3, 1, dataEndRow, totalDays + 1];
+
+                tableRange.Style.Border.Top.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+                tableRange.Style.Border.Bottom.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+                tableRange.Style.Border.Left.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+                tableRange.Style.Border.Right.Style = OfficeOpenXml.Style.ExcelBorderStyle.Thin;
+
+                // =========================
+                // ✅ FILTER
+                // =========================
+                ws.Cells[3, 1, dataEndRow, totalDays + 1].AutoFilter = true;
+
+                // =========================
+                // ✅ LEGEND
+                // =========================
+                int legendRow = dataEndRow + 2;
+
+                ws.Cells[legendRow, 1].Value = "Legend:";
+                ws.Cells[legendRow, 1].Style.Font.Bold = true;
+
+                // Attendance statuses
+                ws.Cells[legendRow + 1, 1].Value = "P   = Present";
+                ws.Cells[legendRow + 2, 1].Value = "A   = Absent";
+                ws.Cells[legendRow + 3, 1].Value = "L   = Late";
+                // Full Day Paid Leaves
+                ws.Cells[legendRow + 4, 1].Value = "CL  = Casual Leave (Full Day Paid)";
+                ws.Cells[legendRow + 5, 1].Value = "SL  = Sick Leave (Full Day Paid)";
+                ws.Cells[legendRow + 6, 1].Value = "PL  = Plan Leave (Full Day Paid)";
+                // Half Day Paid Leaves
+                ws.Cells[legendRow + 7, 1].Value = "HCL = Half Day Casual Leave (Paid)";
+                ws.Cells[legendRow + 8, 1].Value = "HSL = Half Day Sick Leave (Paid)";
+                ws.Cells[legendRow + 9, 1].Value = "HPL = Half Day Plan Leave (Paid)";
+                // Unpaid Half Day
+                ws.Cells[legendRow + 10, 1].Value = "UH  = Unpaid Half Day";
+
+                // Attendance swatch colors
+                ws.Cells[legendRow + 1, 2].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[legendRow + 1, 2].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightGreen);
+
+                ws.Cells[legendRow + 2, 2].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[legendRow + 2, 2].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightCoral);
+
+                ws.Cells[legendRow + 3, 2].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[legendRow + 3, 2].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.Khaki);
+
+                // Full Day Paid Leave swatch colors
+                ws.Cells[legendRow + 4, 2].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[legendRow + 4, 2].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.Orange);
+                ws.Cells[legendRow + 4, 2].Style.Font.Color.SetColor(System.Drawing.Color.White);
+                ws.Cells[legendRow + 4, 2].Style.Font.Bold = true;
+
+                ws.Cells[legendRow + 5, 2].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[legendRow + 5, 2].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.HotPink);
+                ws.Cells[legendRow + 5, 2].Style.Font.Color.SetColor(System.Drawing.Color.White);
+                ws.Cells[legendRow + 5, 2].Style.Font.Bold = true;
+
+                ws.Cells[legendRow + 6, 2].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[legendRow + 6, 2].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.MediumPurple);
+                ws.Cells[legendRow + 6, 2].Style.Font.Color.SetColor(System.Drawing.Color.White);
+                ws.Cells[legendRow + 6, 2].Style.Font.Bold = true;
+
+                // Half Day Paid Leave swatch colors
+                ws.Cells[legendRow + 7, 2].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[legendRow + 7, 2].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.SandyBrown);
+                ws.Cells[legendRow + 7, 2].Style.Font.Color.SetColor(System.Drawing.Color.White);
+                ws.Cells[legendRow + 7, 2].Style.Font.Bold = true;
+
+                ws.Cells[legendRow + 8, 2].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[legendRow + 8, 2].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightPink);
+                ws.Cells[legendRow + 8, 2].Style.Font.Bold = true;
+
+                ws.Cells[legendRow + 9, 2].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[legendRow + 9, 2].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.Plum);
+                ws.Cells[legendRow + 9, 2].Style.Font.Bold = true;
+
+                // Unpaid Half Day swatch color
+                ws.Cells[legendRow + 10, 2].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                ws.Cells[legendRow + 10, 2].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightSkyBlue);
+                ws.Cells[legendRow + 10, 2].Style.Font.Bold = true;
+                // =========================
+                // ✅ DOWNLOAD
+                // =========================
+                var bytes = package.GetAsByteArray();
+                var base64 = Convert.ToBase64String(bytes);
+
+                await JS.InvokeVoidAsync("downloadFile",
+                    $"DayWise_{SelectedMonth}.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    base64);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Excel Error: {ex.Message}");
+        }
+        finally
+        {
+            IsExcelLoading = false;
+            StateHasChanged();
+        }
+    }
+}

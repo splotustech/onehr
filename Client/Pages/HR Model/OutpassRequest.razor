@@ -1,0 +1,1179 @@
+﻿@page "/outpass-request"
+@using SMART_HRMS_SYSTEM.Shared.ViewModel
+@using SMART_HRMS_SYSTEM.Shared.Models
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager NavManager
+
+<div class="report-wrapper">
+    <div class="report-container">
+
+        <!-- Header -->
+        <div class="report-header">
+            <h2>In / Out Pass Requests</h2>
+            <p>Review, approve, and manage short breaks and outpass requests.</p>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-row mb-4">
+            <div class="stat-card stat-total shadow-sm">
+                <div class="stat-icon"><i class="bi bi-briefcase-fill"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Total Requests</p>
+                    <h3 class="stat-count">@TotalRequests</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-late shadow-sm" style="border-left: 4px solid #f59e0b;">
+                <div class="stat-icon" style="background: #fef3c7; color: #d97706;"><i class="bi bi-clock-fill"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Pending Approvals</p>
+                    <h3 class="stat-count text-warning">@PendingCount</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-present shadow-sm">
+                <div class="stat-icon"><i class="bi bi-check-circle-fill"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Approved</p>
+                    <h3 class="stat-count">@ApprovedCount</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-absent shadow-sm">
+                <div class="stat-icon"><i class="bi bi-x-circle-fill"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Rejected</p>
+                    <h3 class="stat-count">@RejectedCount</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Card -->
+        <div class="filter-card shadow-sm mb-4">
+            <div class="filter-row">
+
+                <!-- Filter Type Toggle -->
+                <div class="filter-item">
+                    <label class="filter-label">VIEW TYPE</label>
+                    <select class="form-select custom-select" @bind="FilterType" @bind:after="LoadRequests">
+                        <option value="Daily">Daily View</option>
+                        <option value="Monthly">Monthly View</option>
+                    </select>
+                </div>
+
+                @if (FilterType == "Daily")
+                {
+                    <div class="filter-item">
+                        <label class="filter-label">SELECT DATE</label>
+                        <input type="date" class="form-control custom-select"
+                               value="@SelectedDate.ToString("yyyy-MM-dd")"
+                               @onchange="OnDateChanged" />
+                    </div>
+                }
+                else
+                {
+                    <div class="filter-item">
+                        <label class="filter-label">MONTH</label>
+                        <select class="form-select custom-select" @bind="SelectedMonth" @bind:after="LoadRequests">
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <div class="filter-item">
+                        <label class="filter-label">YEAR</label>
+                        <select class="form-select custom-select" @bind="SelectedYear" @bind:after="LoadRequests">
+                            @for (int i = DateTime.Now.Year + 1; i >= 2024; i--)
+                            {
+                                <option value="@i">@i</option>
+                            }
+                        </select>
+                    </div>
+                }
+
+                <!-- Status -->
+                <div class="filter-item">
+                    <label class="filter-label">STATUS</label>
+                    <select class="form-select custom-select" @bind="FilterStatus" @bind:after="LoadRequests">
+                        <option value="All">All Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Rejected">Rejected</option>
+                    </select>
+                </div>
+
+                <!-- Search -->
+                <div class="filter-item search-item">
+                    <label class="filter-label">SEARCH EMPLOYEE</label>
+                    <div class="search-box">
+                        <i class="bi bi-search search-icon"></i>
+                        <input class="form-control custom-select pl-search" style="width:70%"
+                               placeholder="Name..."
+                               value="@SearchText"
+                               @oninput="OnSearchInput" />
+                    </div>
+                </div>
+
+                <!-- Reset Button -->
+                <div class="filter-item btn-item">
+                    <label class="filter-label d-none d-md-block">&nbsp;</label>
+                    <button class="btn-search w-100" @onclick="ResetFilters" disabled="@IsLoading">
+                        <i class="bi bi-arrow-repeat d-none d-md-inline me-2"></i> <span>Reset</span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Data Grid -->
+        <div class="report-table-wrapper">
+            @if (IsLoading)
+            {
+                <div class="empty-state shadow-sm">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+                    <h5>Loading Data...</h5>
+                    <p>Fetching outpass requests.</p>
+                </div>
+            }
+            else if (!FilteredRecords.Any())
+            {
+                <div class="empty-state shadow-sm">
+                    <div class="empty-icon placeholder-glow"><i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 2rem;"></i></div>
+                    <h5 class="mt-2">No Requests Found</h5>
+                    <p>No outpass requests match your current filters.</p>
+                </div>
+            }
+            else
+            {
+                <table class="table modern-table">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Date / Times</th>
+                            <th>Reason</th>
+                            <th>Status</th>
+                            <th class="text-center">Action</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var r in FilteredRecords)
+                        {
+                            <tr>
+                                <td data-label="Employee">
+                                    <div class="employee-cell text-value">
+                                        <div class="avatar">@GetInitials(r.EmpName)</div>
+                                        <div>
+                                            <span class="fw-bold d-block text-dark">@r.EmpName</span>
+                                            <small class="text-muted">@r.Designation</small>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <td data-label="Date & Times">
+                                    <div class="text-value">
+                                        <span class="fw-bold text-dark d-block">
+                                            @(r.Date?.ToString("dd MMM yyyy") ?? "-")
+                                        </span>
+                                        <br />
+                                        <small class="text-muted">
+                                            Out:
+                                            <b class="text-danger">
+                                                @(r.OutTime.HasValue
+                                                                                        ? DateTime.Today.Add(r.OutTime.Value).ToString("hh:mm tt")
+                                                                                        : "-")
+                                                                                          </b>
+                                                                                          |
+                                                                                          In:
+                                                                                          <b class="text-success">
+                                                @(r.InTime.HasValue
+                                                                                        ? DateTime.Today.Add(r.InTime.Value).ToString("hh:mm tt")
+                                                                                        : "-")
+                                    </b>
+                                </small>
+                            </div>
+                        </td>
+
+                                <td data-label="Reason">
+                                    <span class="text-value text-muted" style="max-width: 200px; display: inline-block; white-space: normal;">
+                                        @r.Reason
+                                    </span>
+                                </td>
+
+                                <td data-label="Status">
+                                    <span class="text-value status-badge @GetStatusCss(r.Status)">@r.Status</span>
+                            @if (r.IsReturned == true)
+                                    {
+                                        <hr />
+                                        <span class="text-value status-badge @GetStatusCss(r.Status)">Returned</span>
+
+                                    }
+                                </td>
+
+                                <td data-label="Action" class="text-center">
+                                    <div class="action-buttons text-value justify-content-md-center">
+                                        @if (r.Status == "Pending")
+                                        {
+                                            <button class="btn-action btn-approve" title="Approve" @onclick="() => PromptApprove(r)">
+                                                <i class="bi bi-check-lg"></i>
+                                            </button>
+                                            <button class="btn-action btn-reject" title="Reject" @onclick="() => PromptReject(r)">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                        }
+                                        else if (r.Status == "Rejected")
+                                        {
+                                            <button class="btn-view" @onclick="() => AlertReason(r.Comment)"><i class="bi bi-info-circle"></i> Details</button>
+
+                                            <button class="btn-action btn-reject" title="Reject" @onclick="() => PromptReject(r)">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- ✅ APPROVE MODAL -->
+@if (ShowApproveModal)
+{
+    <div class="modal-overlay">
+        <div class="op-confirm-modal animate-pop">
+            <div class="op-modal-icon op-icon-success"><i class="bi bi-check-circle-fill"></i></div>
+            <h5 class="op-modal-title">Approve Request</h5>
+            <p class="op-modal-desc">Approve the outpass for <b>@SelectedRequest?.EmpName</b>?</p>
+            <div class="op-modal-actions">
+                <button class="op-btn-cancel" @onclick="CloseModals">Cancel</button>
+                <button class="op-btn-approve" @onclick="ConfirmApprove" disabled="@IsProcessing">
+                    @(IsProcessing ? "Approving..." : "✓ Yes, Approve")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ✅ REJECT MODAL -->
+@if (ShowRejectModal)
+{
+    <div class="modal-overlay">
+        <div class="op-confirm-modal animate-pop">
+            <div class="op-modal-icon op-icon-danger"><i class="bi bi-x-circle-fill"></i></div>
+            <h5 class="op-modal-title">Reject Request</h5>
+            <p class="op-modal-desc">Provide a reason for rejecting <b>@SelectedRequest?.EmpName</b>'s outpass.</p>
+            <div class="text-start mb-3">
+                <label class="op-modal-label">Reason / Comment <span class="text-danger">*</span></label>
+                <textarea class="op-modal-textarea" rows="3"
+                          @bind="RejectReason"
+                          placeholder="Enter reason for rejection..."></textarea>
+            </div>
+            <div class="op-modal-actions">
+                <button class="op-btn-cancel" @onclick="CloseModals">Cancel</button>
+                <button class="op-btn-reject" @onclick="ConfirmReject" disabled="@IsProcessing">
+                    @(IsProcessing ? "Rejecting..." : "✕ Confirm Reject")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Toast Alert -->
+@if (!string.IsNullOrEmpty(ToastMessage))
+{
+    <div class="custom-toast @ToastCssClass">
+        @ToastMessage
+    </div>
+}
+
+<style>
+    /* ===== GLOBAL (Inherited from your system) ===== */
+    .report-wrapper {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #f3f4f6 0%, #fefefe 100%);
+        padding: 30px 15px;
+        font-family: 'Inter', 'Segoe UI', sans-serif;
+    }
+
+    .btn-view {
+        background: #f1f5f9;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #475569;
+    }
+
+    .report-container {
+        max-width: 1200px;
+        margin: auto;
+    }
+
+    .report-header h2 {
+        font-weight: 800;
+        font-size: 26px;
+        color: #0f172a;
+        margin-bottom: 5px;
+    }
+
+    .report-header p {
+        color: #64748b;
+        font-size: 14px;
+        margin-bottom: 25px;
+    }
+
+    /* ===== STATS ROW ===== */
+    .stats-row {
+        display: flex;
+        gap: 15px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 5px;
+    }
+
+        .stats-row::-webkit-scrollbar {
+            display: none;
+        }
+
+    .stat-card {
+        background: #ffffff;
+        padding: 20px;
+        border-radius: 16px;
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        border: none;
+        flex: 1;
+        min-width: 150px;
+    }
+
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        font-size: 22px;
+        flex-shrink: 0;
+    }
+
+    .stat-total .stat-icon {
+        background: #eff6ff;
+        color: #4f46e5;
+    }
+
+    .stat-present .stat-icon {
+        background: #dcfce7;
+        color: #16a34a;
+    }
+
+    .stat-late .stat-icon {
+        background: #fef3c7;
+        color: #d97706;
+    }
+
+    .stat-absent .stat-icon {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+
+    .stat-title {
+        font-size: 11px;
+        color: #64748b;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin: 0 0 2px 0;
+    }
+
+    .stat-count {
+        font-size: 24px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    /* ===== FILTER CARD (Fixed Overlap Issue) ===== */
+    .filter-card {
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 20px;
+        border: none;
+    }
+
+    .filter-row {
+        display: flex;
+        gap: 15px;
+        align-items: flex-end;
+        flex-wrap: wrap; /* Changed to wrap to prevent squishing */
+    }
+
+    .filter-item {
+        flex: 1;
+        min-width: 150px; /* Minimum width before it wraps */
+    }
+
+    .search-item {
+        flex: 2; /* Make search box slightly larger */
+        min-width: 200px;
+    }
+
+    .btn-item {
+        flex: 0 0 120px; /* Fixed width for button so it never gets crushed */
+    }
+
+    .filter-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .custom-select {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        padding: 10px 9px;
+        font-weight: 500;
+        font-size: 14px;
+        background: #f8fafc;
+        color: #0f172a;
+        transition: all 0.2s ease;
+    }
+
+        .custom-select:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+            background: #fff;
+            outline: none;
+        }
+
+    .btn-search {
+        background: #f8fafc;
+        color: #0f172a;
+        border: 1px solid #e2e8f0;
+        padding: 10px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-search:hover:not(:disabled) {
+            background: #e2e8f0;
+        }
+
+    .search-box {
+        position: relative;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #94a3b8;
+    }
+
+    .pl-search {
+        padding-left: 35px;
+        width: 100%;
+    }
+
+    /* ===== TABLE WRAPPER ===== */
+    .modern-table {
+        width: 100%;
+        background: white;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        margin-bottom: 0;
+    }
+
+        .modern-table thead {
+            background: #f8fafc;
+        }
+
+        .modern-table th {
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            padding: 16px;
+            text-transform: uppercase;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .modern-table td {
+            padding: 16px;
+            font-size: 14px;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            color: #334155;
+        }
+
+        .modern-table tbody tr:hover {
+            background: #f8fafc;
+        }
+
+    /* Table Components */
+    .employee-cell {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #3b82f6);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+
+    .status-badge {
+        padding: 6px 12px;
+        border-radius: 30px;
+        font-size: 12px;
+        font-weight: 700;
+        display: inline-block;
+        text-align: center;
+        min-width: 80px;
+    }
+
+    .bg-present {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .bg-late {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .bg-absent {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .bg-secondary {
+        background: #f1f5f9;
+        color: #64748b;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .btn-action {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        border: none;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: 0.2s;
+        color: white;
+        font-size: 18px; /* Slightly larger icon */
+    }
+
+    .btn-approve {
+        background: #10b981;
+    }
+
+        .btn-approve:hover {
+            background: #059669;
+        }
+
+    .btn-reject {
+        background: #ef4444;
+    }
+
+        .btn-reject:hover {
+            background: #dc2626;
+        }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: white;
+        border-radius: 16px;
+    }
+
+    /* ===== MODALS UI ===== */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(15, 23, 42, 0.65);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+    }
+
+    /* ── Approve / Reject Modals ── */
+    .op-confirm-modal {
+        background: #fff;
+        border-radius: 20px;
+        width: 90%;
+        max-width: 380px;
+        padding: 28px 24px 22px;
+        text-align: center;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+    }
+    .op-modal-icon {
+        width: 64px; height: 64px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 30px; margin: 0 auto 14px; flex-shrink: 0;
+    }
+    .op-icon-success { background: #dcfce7; color: #16a34a; }
+    .op-icon-danger  { background: #fee2e2; color: #dc2626; }
+    .op-modal-title  { font-size: 18px; font-weight: 800; color: #0f172a; margin: 0 0 8px; }
+    .op-modal-desc   { font-size: 13px; color: #64748b; margin: 0 0 18px; line-height: 1.5; }
+    .op-modal-label  {
+        font-size: 12px; font-weight: 700; color: #475569;
+        text-transform: uppercase; letter-spacing: 0.4px;
+        display: block; margin-bottom: 6px; text-align: left;
+    }
+    .op-modal-textarea {
+        width: 100%; padding: 10px 12px;
+        border: 1.5px solid #e2e8f0; border-radius: 10px;
+        font-size: 13px; resize: none; outline: none;
+        font-family: inherit; color: #1e293b; background: #f8fafc;
+        transition: 0.15s;
+    }
+    .op-modal-textarea:focus { border-color: #4f46e5; background: #fff; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+    .op-modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+    .op-btn-cancel {
+        flex: 1; padding: 11px; border-radius: 10px;
+        border: 1.5px solid #e2e8f0; background: #f8fafc;
+        color: #475569; font-size: 13px; font-weight: 700; cursor: pointer; transition: 0.15s;
+    }
+    .op-btn-cancel:hover { background: #e2e8f0; }
+    .op-btn-approve {
+        flex: 2; padding: 11px; border-radius: 10px; border: none;
+        background: linear-gradient(135deg, #16a34a, #22c55e);
+        color: #fff; font-size: 13px; font-weight: 700; cursor: pointer;
+        box-shadow: 0 4px 12px rgba(22,163,74,0.35); transition: 0.15s;
+    }
+    .op-btn-approve:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+    .op-btn-approve:disabled { opacity: 0.55; cursor: not-allowed; }
+    .op-btn-reject {
+        flex: 2; padding: 11px; border-radius: 10px; border: none;
+        background: linear-gradient(135deg, #dc2626, #ef4444);
+        color: #fff; font-size: 13px; font-weight: 700; cursor: pointer;
+        box-shadow: 0 4px 12px rgba(220,38,38,0.35); transition: 0.15s;
+    }
+    .op-btn-reject:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+    .op-btn-reject:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    /* Toast */
+    .custom-toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        color: white;
+        z-index: 3000;
+        animation: slideUp 0.3s ease;
+    }
+
+    .toast-success {
+        background: #10b981;
+    }
+
+    .toast-error {
+        background: #ef4444;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            transform: translateY(20px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    @@keyframes slideUp {
+        from {
+            transform: translateY(50px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    /* =========================================
+               📱 MOBILE RESPONSIVE
+            ========================================= */
+    @@media (max-width: 992px) {
+        .filter-row {
+            flex-wrap: wrap;
+        }
+
+        .filter-item {
+            flex: 1 1 45%;
+        }
+
+        .btn-item {
+            flex: 1 1 100%;
+            margin-top: 5px;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .report-wrapper {
+            padding: 15px 10px;
+        }
+
+        .filter-row {
+            flex-wrap: wrap;
+        }
+
+        .filter-item {
+            flex: 1 1 100%;
+        }
+
+        .search-item {
+            flex: 1 1 100%;
+        }
+
+        .btn-item {
+            flex: 1 1 100%;
+            margin-top: 5px;
+        }
+
+        .custom-select {
+            padding: 8px 10px;
+            font-size: 13px;
+        }
+
+        .stat-card {
+            padding: 15px 10px;
+            flex-direction: column;
+            text-align: center;
+            gap: 8px;
+        }
+
+        .report-table-wrapper {
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .modern-table thead {
+            display: none;
+        }
+
+        .modern-table, .modern-table tbody, .modern-table tr, .modern-table td {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+            .modern-table tr {
+                margin-bottom: 15px;
+                background: white;
+                padding: 15px;
+                border-radius: 16px;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+                border: 1px solid #e2e8f0;
+            }
+
+            .modern-table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px 0;
+                border: none;
+                font-size: 13px;
+                gap: 15px;
+                text-align: right;
+            }
+
+                .modern-table td::before {
+                    content: attr(data-label);
+                    font-weight: 600;
+                    color: #64748b;
+                    min-width: 100px;
+                    text-transform: uppercase;
+                    font-size: 11px;
+                    text-align: left;
+                }
+        /* Adjustments for Outpass specific cells */
+        .text-value {
+            text-align: right;
+            word-wrap: break-word;
+            white-space: normal;
+            max-width: 65%;
+            display: block;
+        }
+
+        .employee-cell {
+            justify-content: flex-end;
+            text-align: right;
+        }
+
+        .action-buttons {
+            justify-content: flex-end !important;
+            width: 100%;
+        }
+
+        .confirm-modal {
+            padding: 25px 15px;
+        }
+    }
+</style>
+
+@code {
+    private bool IsLoading = false;
+    private bool IsProcessing = false;
+
+    // Filters
+    private string FilterType = "Daily"; // Daily or Monthly
+    private DateTime SelectedDate = DateTime.Today;
+    private int SelectedMonth = DateTime.Today.Month;
+    private int SelectedYear = DateTime.Today.Year;
+    private string FilterStatus = "All";
+    private string SearchText = "";
+
+    // Stats
+    private int TotalRequests, PendingCount, ApprovedCount, RejectedCount;
+
+    // Data - Explicitly initialized with new List<T>()
+    private List<InOutPassViewModel> AllRecords = new List<InOutPassViewModel>();
+    private List<InOutPassViewModel> FilteredRecords = new List<InOutPassViewModel>();
+
+    // Modal Variables
+    private bool ShowApproveModal = false;
+    private bool ShowRejectModal = false;
+    private InOutPassViewModel SelectedRequest = null;
+    private string RejectReason = "";
+
+    // Toast
+    private string ToastMessage = "";
+    private string ToastCssClass = "";
+    private string EmployeeName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRequests();
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                EmployeeName = await JS.InvokeAsync<string>("localStorage.getItem", "empName");
+                if (string.IsNullOrEmpty(EmployeeName))
+                {
+                    NavManager.NavigateTo("/", true);
+                }
+                StateHasChanged();
+            }
+            catch
+            {
+            }
+        }
+    }
+    private async Task LoadRequests()
+    {
+        IsLoading = true;
+        try
+        {
+            // Build the URL based on the View Type (Daily or Monthly)
+            string url = $"api/InOutPass/GetPassRequests?filterType={FilterType}";
+
+            if (FilterType == "Daily")
+            {
+                url += $"&date={SelectedDate:yyyy-MM-dd}";
+            }
+            else
+            {
+                url += $"&month={SelectedMonth}&year={SelectedYear}";
+            }
+
+            // Fetch actual data from the database
+            var response = await Http.GetFromJsonAsync<List<InOutPassViewModel>>(url);
+
+            if (response != null)
+            {
+                AllRecords = response;
+            }
+            else
+            {
+                AllRecords = new List<InOutPassViewModel>();
+            }
+
+            // Apply local text-search and status filters
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            ShowToast("Failed to load data from server", "toast-error");
+            AllRecords = new List<InOutPassViewModel>();
+            FilteredRecords = new List<InOutPassViewModel>();
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        var q = AllRecords.AsEnumerable();
+
+        // Local Status Filter
+        if (FilterStatus != "All")
+            q = q.Where(x => x.Status == FilterStatus);
+
+        // Local Search Filter
+        if (!string.IsNullOrWhiteSpace(SearchText))
+            q = q.Where(x => !string.IsNullOrEmpty(x.EmpName) && x.EmpName.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+
+        FilteredRecords = q.ToList();
+
+        // Calculate Stats based on currently fetched records
+        TotalRequests = FilteredRecords.Count();
+        PendingCount = FilteredRecords.Count(x => x.Status == "Pending");
+        ApprovedCount = FilteredRecords.Count(x => x.Status == "Approved");
+        RejectedCount = FilteredRecords.Count(x => x.Status == "Rejected");
+        StateHasChanged(); // UI रिफ्रेश करण्यासाठी
+    }
+
+
+
+    private void ResetFilters()
+    {
+        SearchText = "";
+        FilterStatus = "All";
+        FilterType = "Daily";
+        SelectedDate = DateTime.Today;
+        ApplyFilters();
+    }
+
+    // Input Handlers
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        SearchText = e.Value?.ToString() ?? string.Empty;
+        ApplyFilters();
+    }
+
+    private async Task OnDateChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var parsedDate))
+        {
+            SelectedDate = parsedDate;
+            await LoadRequests();
+        }
+    }
+
+    // Modals
+    private void PromptApprove(InOutPassViewModel req)
+    {
+        SelectedRequest = req;
+        ShowApproveModal = true;
+    }
+
+    private void PromptReject(InOutPassViewModel req)
+    {
+        SelectedRequest = req;
+        RejectReason = "";
+        ShowRejectModal = true;
+    }
+
+    private void CloseModals()
+    {
+        ShowApproveModal = false;
+        ShowRejectModal = false;
+        SelectedRequest = null;
+    }
+
+    private void AlertReason(string comment)
+    {
+        JS.InvokeVoidAsync("alert", $"Rejection Reason: \n\n{comment}");
+    }
+
+    // Actions
+    private async Task ConfirmApprove()
+    {
+        IsProcessing = true;
+        try
+        {
+            // IMPORTANT: Call your API
+            await Http.PutAsJsonAsync($"api/InOutPass/Approve/{SelectedRequest.Id}", new object());
+
+            await Task.Delay(800); // Simulate API
+
+            var item = AllRecords.FirstOrDefault(x => x.Id == SelectedRequest.Id);
+            if (item != null) item.Status = "Approved";
+            // =========================================================
+            // 🔥 NEW: Outpass Approved झाल्यावर लगेच Notification API ला कॉल करा
+            // =========================================================
+            try
+            {
+                string title = "Outpass Request Approved";
+                string body = $"{SelectedRequest.EmpName}, your Outpass has been approved.";
+                string link = "/attendance";
+
+                var notification = new NotificationRequest
+                {
+                    EmpId = Convert.ToInt32(SelectedRequest.Empid),
+                    EmployeeName = SelectedRequest.EmpName,
+                    Title = title,
+                    Body = body,
+                    Link = link
+                };
+
+                await Http.PostAsJsonAsync("api/Notifications/sendEmployeeNotification", notification);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Notification send failed: " + ex.Message);
+            }
+            ShowToast("Request Approved Successfully!", "toast-success");
+            CloseModals();
+            ResetFilters();
+            await LoadRequests();
+        }
+        catch
+        {
+            ShowToast("Error approving request.", "toast-error");
+        }
+        IsProcessing = false;
+    }
+
+    private async Task ConfirmReject()
+    {
+        if (string.IsNullOrWhiteSpace(RejectReason))
+        {
+            ShowToast("Rejection reason is required.", "toast-error");
+            return;
+        }
+
+        IsProcessing = true;
+        try
+        {
+            // IMPORTANT: Call your API passing the reason
+            await Http.PutAsJsonAsync($"api/InOutPass/Reject/{SelectedRequest.Id}", new { Comment = RejectReason });
+
+            await Task.Delay(800); // Simulate API
+
+            var item = AllRecords.FirstOrDefault(x => x.Id == SelectedRequest.Id);
+            if (item != null)
+            {
+                item.Status = "Rejected";
+                item.Comment = RejectReason;
+            }
+            // =========================================================
+            // 🔥 NEW: Outpass Rejected झाल्यावर लगेच Notification API ला कॉल करा
+            // =========================================================
+            try
+            {
+                string title = "Outpass Request Rejected ❌";
+                string body = $"{SelectedRequest.EmpName}, your Outpass request has been rejected.";
+                string link = "/attendance";
+
+                var notification = new NotificationRequest
+                {
+                    EmpId = Convert.ToInt32(SelectedRequest.Empid),
+                    EmployeeName = SelectedRequest.EmpName,
+                    Title = title,
+                    Body = body,
+                    Link = link
+                };
+
+                await Http.PostAsJsonAsync("api/Notifications/sendEmployeeNotification", notification);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Notification send failed: " + ex.Message);
+            }
+            ShowToast("Request Rejected.", "toast-success");
+            CloseModals();
+            ResetFilters();
+            await LoadRequests();
+        }
+        catch
+        {
+            ShowToast("Error rejecting request.", "toast-error");
+        }
+        IsProcessing = false;
+    }
+
+    // Helpers
+    private async void ShowToast(string msg, string css)
+    {
+        ToastMessage = msg;
+        ToastCssClass = css;
+        StateHasChanged();
+        await Task.Delay(3000);
+        ToastMessage = "";
+        StateHasChanged();
+    }
+
+    private string GetStatusCss(string status) => status switch
+    {
+        "Approved" => "bg-present",
+        "Pending" => "bg-late",
+        "Rejected" => "bg-absent",
+        _ => "bg-secondary"
+    };
+
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "U";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1) return parts[0].Substring(0, 1).ToUpper();
+        return (parts[0].Substring(0, 1) + parts[1].Substring(0, 1)).ToUpper();
+    }
+}

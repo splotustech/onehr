@@ -1,0 +1,760 @@
+@page "/holidayscalender"
+@using System.Globalization
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<div class="hc-page">
+
+    <!-- ══ HERO HEADER ══════════════════════════════════════════════ -->
+    <div class="hero">
+        <div class="hero-bg-circles">
+            <div class="circle c1"></div>
+            <div class="circle c2"></div>
+            <div class="circle c3"></div>
+        </div>
+
+        <div class="hero-top">
+            <div class="hero-brand">
+                <i class="bi bi-calendar3-week"></i>
+                <span>Holiday Calendar</span>
+            </div>
+            <div class="hero-year-badge">@DisplayDate.Year</div>
+        </div>
+
+        <div class="hero-center">
+            <button class="hero-nav" @onclick="() => ChangeMonth(-1)">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+            <div class="hero-month-block">
+                <h1 class="hero-month">@DisplayDate.ToString("MMMM")</h1>
+                <p class="hero-stats-line">
+                    <span><i class="bi bi-calendar-x"></i> @MonthHolidays.Count Holidays</span>
+                    <span class="sep">·</span>
+                    <span><i class="bi bi-sun"></i> @SundaysInMonth Sundays</span>
+                    <span class="sep">·</span>
+                    <span><i class="bi bi-briefcase"></i> @WorkingDays Working Days</span>
+                </p>
+            </div>
+            <button class="hero-nav" @onclick="() => ChangeMonth(1)">
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
+
+        <!-- Month tabs -->
+        <div class="month-tabs-wrap">
+            <div class="month-tabs">
+                @{var months = new[]{"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};}
+                @for (int m = 1; m <= 12; m++)
+                {
+                    var mi = m;
+                    <button class="mtab @(DisplayDate.Month == mi ? "mtab-active" : "")"
+                            @onclick="() => SelectMonth(mi)">
+                        @months[mi - 1]
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ CALENDAR CARD ═════════════════════════════════════════════ -->
+    @if (IsLoading)
+    {
+        <div class="cal-card loading-card">
+            <div class="spinner-border text-primary" style="width:3rem;height:3rem"></div>
+            <p class="mt-3 text-muted fw-semibold">Loading holidays…</p>
+        </div>
+    }
+    else
+    {
+        <div class="cal-card">
+
+            <!-- Day headers -->
+            <div class="day-header-row">
+                @foreach (var (label, isSun) in new[]{("SUN",true),("MON",false),("TUE",false),("WED",false),("THU",false),("FRI",false),("SAT",false)})
+                {
+                    <div class="dh @(isSun ? "dh-sun" : "")">@label</div>
+                }
+            </div>
+
+            <!-- Date grid -->
+            <div class="date-grid">
+                @for (int i = 0; i < StartOffset; i++)
+                {
+                    <div class="dc dc-empty"></div>
+                }
+
+                @for (int day = 1; day <= DaysInMonth; day++)
+                {
+                    var date    = new DateTime(DisplayDate.Year, DisplayDate.Month, day);
+                    var holiday = MonthHolidays.FirstOrDefault(h => h.Date.Date == date.Date);
+                    bool isSun  = date.DayOfWeek == DayOfWeek.Sunday;
+                    bool today  = date.Date == DateTime.Today;
+
+                    string cls = "dc";
+                    if (today)            cls += " dc-today";
+                    else if (holiday != null && isSun) cls += " dc-hol-sun";
+                    else if (holiday != null) cls += " dc-holiday";
+                    else if (isSun)       cls += " dc-sun";
+
+                    <div class="@cls" title="@(holiday?.Name ?? date.ToString("dddd, dd MMM"))">
+                        <span class="dc-num">@day</span>
+                        @if (today)
+                        {
+                            <span class="dc-today-dot"></span>
+                        }
+                        @if (holiday != null)
+                        {
+                            <span class="dc-hname">@TruncateName(holiday.Name, 8)</span>
+                        }
+                        @if (isSun && holiday == null && !today)
+                        {
+                            <span class="dc-off">off</span>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Legend -->
+            <div class="legend">
+                <div class="leg-item"><span class="leg-dot ld-today"></span>Today</div>
+                <div class="leg-item"><span class="leg-dot ld-holiday"></span>Holiday</div>
+                <div class="leg-item"><span class="leg-dot ld-sun"></span>Sunday</div>
+                <div class="leg-item"><span class="leg-dot ld-holsun"></span>Holiday + Sunday</div>
+                <div class="leg-today-btn">
+                    <button @onclick="GoToToday"><i class="bi bi-crosshair me-1"></i>Go to Today</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ HOLIDAY LIST CARDS ═══════════════════════════════════ -->
+        <div class="hlist-section">
+            <div class="hlist-header">
+                <i class="bi bi-stars me-2"></i>
+                Holidays in @DisplayDate.ToString("MMMM yyyy")
+                @if (MonthHolidays.Any())
+                {
+                    <span class="hlist-count">@MonthHolidays.Count</span>
+                }
+            </div>
+
+            @if (!MonthHolidays.Any())
+            {
+                <div class="hlist-empty">
+                    <i class="bi bi-emoji-laughing"></i>
+                    <p>No holidays this month — enjoy the full work schedule!</p>
+                </div>
+            }
+            else
+            {
+                <div class="hlist-grid">
+                    @foreach (var h in MonthHolidays.OrderBy(x => x.Date))
+                    {
+                        bool past   = h.Date.Date < DateTime.Today;
+                        bool isNow  = h.Date.Date == DateTime.Today;
+                        int  daysTo = (h.Date.Date - DateTime.Today).Days;
+
+                        string cardCls = isNow ? "hc-card hc-now" : past ? "hc-card hc-past" : "hc-card hc-future";
+
+                        <div class="@cardCls">
+                            <div class="hcc-top">
+                                <div class="hcc-datebox">
+                                    <span class="hcc-day">@h.Date.Day</span>
+                                    <span class="hcc-month">@h.Date.ToString("MMM")</span>
+                                </div>
+                                <div class="hcc-dow">@h.Date.ToString("dddd")</div>
+                            </div>
+                            <div class="hcc-body">
+                                <p class="hcc-name">@h.Name</p>
+                                @if (!string.IsNullOrWhiteSpace(h.Description))
+                                {
+                                    <p class="hcc-desc">@h.Description</p>
+                                }
+                            </div>
+                            <div class="hcc-footer">
+                                @if (isNow)
+                                {
+                                    <span class="hcc-badge badge-now"><i class="bi bi-circle-fill me-1" style="font-size:7px"></i>Today</span>
+                                }
+                                else if (past)
+                                {
+                                    <span class="hcc-badge badge-past">Passed</span>
+                                }
+                                else
+                                {
+                                    <span class="hcc-badge badge-future">in @daysTo day@(daysTo == 1 ? "" : "s")</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(h.Department) && h.Department != "All")
+                                {
+                                    <span class="hcc-dept"><i class="bi bi-building"></i> @h.Department</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <p class="page-footer">* Holidays are subject to government circulars and company policy.</p>
+</div>
+
+<style>
+/* ══ PAGE ══════════════════════════════════════════════════════════ */
+.hc-page {
+    min-height: 100vh;
+    background: #f0f4f8;
+    padding-bottom: 40px;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+/* ══ HERO ══════════════════════════════════════════════════════════ */
+.hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0ea5e9 100%);
+    padding: 28px 24px 0;
+    position: relative;
+    overflow: hidden;
+}
+
+/* floating bg circles */
+.hero-bg-circles { position: absolute; inset: 0; pointer-events: none; }
+.circle { position: absolute; border-radius: 50%; opacity: 0.08; background: #fff; }
+.c1 { width: 300px; height: 300px; top: -100px; right: -80px; }
+.c2 { width: 200px; height: 200px; bottom: 20px; left: -60px; }
+.c3 { width: 120px; height: 120px; top: 40px; left: 40%; }
+
+.hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    position: relative;
+    z-index: 2;
+}
+
+.hero-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: rgba(255,255,255,0.85);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+.hero-brand i { font-size: 20px; color: #38bdf8; }
+
+.hero-year-badge {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    padding: 5px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+.hero-center {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    z-index: 2;
+    margin-bottom: 24px;
+}
+
+.hero-nav {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.2s;
+    flex-shrink: 0;
+}
+.hero-nav:hover { background: rgba(255,255,255,0.25); border-color: #fff; }
+
+.hero-month-block { text-align: center; flex: 1; }
+.hero-month {
+    font-size: 52px;
+    font-weight: 900;
+    color: #fff;
+    margin: 0;
+    letter-spacing: -1px;
+    text-shadow: 0 2px 20px rgba(0,0,0,0.3);
+    line-height: 1;
+}
+
+.hero-stats-line {
+    margin: 8px 0 0;
+    color: rgba(255,255,255,0.7);
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.hero-stats-line i { margin-right: 4px; color: #38bdf8; }
+.sep { color: rgba(255,255,255,0.35); }
+
+/* Month tabs */
+.month-tabs-wrap {
+    overflow-x: auto;
+    position: relative;
+    z-index: 2;
+    padding-bottom: 1px;
+}
+.month-tabs-wrap::-webkit-scrollbar { display: none; }
+
+.month-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 4px;
+    width: max-content;
+    min-width: 100%;
+    justify-content: center;
+}
+
+.mtab {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    color: rgba(255,255,255,0.55);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    transition: 0.15s;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+.mtab:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.mtab-active {
+    background: #fff;
+    color: #0f172a;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.15);
+}
+
+/* ══ CALENDAR CARD ══════════════════════════════════════════════════ */
+.cal-card {
+    background: #fff;
+    border-radius: 0 0 20px 20px;
+    padding: 24px 20px 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    margin: 0 0 20px;
+}
+
+.loading-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    border-radius: 20px;
+    margin: 20px;
+}
+
+/* Day headers */
+.day-header-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.dh {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 800;
+    color: #94a3b8;
+    padding: 6px 0;
+    letter-spacing: 1px;
+}
+.dh-sun { color: #f43f5e; }
+
+/* Date grid */
+.date-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+}
+
+.dc {
+    position: relative;
+    min-height: 80px;
+    border-radius: 14px;
+    padding: 10px 8px 8px;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: default;
+    transition: transform 0.12s, box-shadow 0.12s;
+    border: 1.5px solid transparent;
+}
+.dc:hover:not(.dc-empty) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    border-color: #bae6fd;
+    z-index: 1;
+}
+.dc-empty { background: transparent; border: none; min-height: 80px; }
+
+.dc-num {
+    font-size: 18px;
+    font-weight: 800;
+    color: #1e293b;
+    line-height: 1;
+}
+
+/* TODAY */
+.dc-today {
+    background: linear-gradient(135deg, #0ea5e9, #6366f1);
+    border-color: transparent;
+    box-shadow: 0 4px 16px rgba(14,165,233,0.4);
+}
+.dc-today .dc-num { color: #fff; }
+.dc-today-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.8);
+}
+.dc-today .dc-hname { background: rgba(255,255,255,0.25); color: #fff; }
+.dc-today .dc-off   { background: rgba(255,255,255,0.2);  color: #fff; }
+
+/* SUNDAY */
+.dc-sun { background: #fff1f2; }
+.dc-sun .dc-num { color: #f43f5e; }
+.dc-off {
+    font-size: 9px;
+    font-weight: 700;
+    background: #ffe4e6;
+    color: #e11d48;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* HOLIDAY */
+.dc-holiday {
+    background: #ecfdf5;
+    border-color: #6ee7b7;
+}
+.dc-holiday .dc-num { color: #047857; }
+
+/* HOLIDAY + SUNDAY */
+.dc-hol-sun {
+    background: #fff1f2;
+    border-color: #fca5a5;
+}
+.dc-hol-sun .dc-num { color: #be123c; }
+
+.dc-hname {
+    font-size: 9px;
+    font-weight: 700;
+    background: #d1fae5;
+    color: #065f46;
+    padding: 2px 5px;
+    border-radius: 4px;
+    text-align: center;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dc-hol-sun .dc-hname { background: #ffe4e6; color: #be123c; }
+
+/* Legend */
+.legend {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid #f1f5f9;
+}
+.leg-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 600;
+}
+.leg-dot {
+    width: 12px; height: 12px;
+    border-radius: 4px;
+    display: inline-block;
+}
+.ld-today   { background: linear-gradient(135deg, #0ea5e9, #6366f1); }
+.ld-holiday { background: #6ee7b7; }
+.ld-sun     { background: #fca5a5; }
+.ld-holsun  { background: #f87171; }
+
+.leg-today-btn { margin-left: auto; }
+.leg-today-btn button {
+    background: #0f172a;
+    color: #fff;
+    border: none;
+    padding: 7px 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.2s;
+}
+.leg-today-btn button:hover { background: #1e3a5f; }
+
+/* ══ HOLIDAY LIST ══════════════════════════════════════════════════ */
+.hlist-section {
+    margin: 0 0 20px;
+    padding: 0 20px;
+}
+
+.hlist-header {
+    font-size: 14px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.hlist-header i { color: #f59e0b; }
+.hlist-count {
+    background: #0f172a;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+}
+
+.hlist-empty {
+    background: #fff;
+    border-radius: 16px;
+    padding: 40px 20px;
+    text-align: center;
+    color: #94a3b8;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.hlist-empty i { font-size: 36px; display: block; margin-bottom: 10px; }
+.hlist-empty p  { font-size: 13px; font-weight: 600; margin: 0; }
+
+.hlist-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+}
+
+/* Holiday card */
+.hc-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-top: 4px solid transparent;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.hc-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.10); }
+
+.hc-future { border-top-color: #0ea5e9; }
+.hc-now    { border-top-color: #6366f1; background: #fafeff; }
+.hc-past   { border-top-color: #e2e8f0; opacity: 0.75; }
+
+.hcc-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.hcc-datebox {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 8px 12px;
+    min-width: 52px;
+}
+.hc-now .hcc-datebox    { background: #eef2ff; }
+.hc-future .hcc-datebox { background: #f0f9ff; }
+
+.hcc-day {
+    font-size: 26px;
+    font-weight: 900;
+    color: #0f172a;
+    line-height: 1;
+}
+.hcc-month {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hcc-dow {
+    font-size: 12px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-align: right;
+}
+
+.hcc-body { flex: 1; }
+.hcc-name {
+    font-size: 14px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 4px;
+    line-height: 1.3;
+}
+.hcc-desc {
+    font-size: 11px;
+    color: #64748b;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.hcc-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.hcc-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+}
+.badge-now    { background: #eef2ff; color: #4f46e5; }
+.badge-future { background: #f0f9ff; color: #0369a1; }
+.badge-past   { background: #f1f5f9; color: #94a3b8; }
+
+.hcc-dept {
+    font-size: 10px;
+    color: #7c3aed;
+    background: #f5f3ff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+}
+
+/* ══ PAGE FOOTER ═══════════════════════════════════════════════════ */
+.page-footer {
+    text-align: center;
+    font-size: 11px;
+    color: #94a3b8;
+    padding: 0 20px;
+}
+
+/* ══ MOBILE ════════════════════════════════════════════════════════ */
+@@media (max-width: 768px) {
+    .hero { padding: 20px 16px 0; }
+    .hero-month { font-size: 34px; }
+    .hero-stats-line { font-size: 11px; gap: 6px; }
+    .mtab { padding: 7px 12px; font-size: 11px; }
+    .cal-card { padding: 16px 10px; border-radius: 0 0 16px 16px; }
+    .dc { min-height: 56px; padding: 6px 4px; border-radius: 10px; }
+    .dc-num { font-size: 14px; }
+    .dc-hname { font-size: 8px; }
+    .dc-off { font-size: 8px; }
+    .hlist-section { padding: 0 12px; }
+    .hlist-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .hcc-day { font-size: 20px; }
+    .hcc-name { font-size: 12px; }
+    .legend { gap: 8px; }
+    .leg-today-btn { width: 100%; }
+    .leg-today-btn button { width: 100%; text-align: center; }
+}
+
+@@media (max-width: 480px) {
+    .hlist-grid { grid-template-columns: 1fr; }
+    .hero-month { font-size: 28px; }
+}
+</style>
+
+@code {
+    private DateTime DisplayDate = DateTime.Today;
+    private bool IsLoading = true;
+
+    private int DaysInMonth => DateTime.DaysInMonth(DisplayDate.Year, DisplayDate.Month);
+    private int StartOffset => (int)new DateTime(DisplayDate.Year, DisplayDate.Month, 1).DayOfWeek;
+
+    private List<HolidayItem> AllHolidays = new();
+    private List<HolidayItem> MonthHolidays => AllHolidays
+        .Where(h => h.Date.Month == DisplayDate.Month && h.Date.Year == DisplayDate.Year)
+        .ToList();
+
+    private int SundaysInMonth => Enumerable.Range(1, DaysInMonth)
+        .Count(d => new DateTime(DisplayDate.Year, DisplayDate.Month, d).DayOfWeek == DayOfWeek.Sunday);
+
+    private int WorkingDays => DaysInMonth - SundaysInMonth -
+        MonthHolidays.Count(h => h.Date.DayOfWeek != DayOfWeek.Sunday);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadHolidays(DisplayDate.Year);
+    }
+
+    private async Task LoadHolidays(int year)
+    {
+        IsLoading = true;
+        StateHasChanged();
+        try
+        {
+            var data = await Http.GetFromJsonAsync<List<HolidayItem>>(
+                $"api/holiday/GetByYear?year={year}");
+            AllHolidays = data ?? new();
+        }
+        catch { AllHolidays = new(); }
+        finally { IsLoading = false; StateHasChanged(); }
+    }
+
+    private async Task ChangeMonth(int step)
+    {
+        var next = DisplayDate.AddMonths(step);
+        if (next.Year != DisplayDate.Year)
+            await LoadHolidays(next.Year);
+        DisplayDate = next;
+    }
+
+    private async Task SelectMonth(int month)
+    {
+        DisplayDate = new DateTime(DisplayDate.Year, month, 1);
+        await Task.CompletedTask;
+    }
+
+    private async Task GoToToday()
+    {
+        if (DateTime.Today.Year != DisplayDate.Year)
+            await LoadHolidays(DateTime.Today.Year);
+        DisplayDate = DateTime.Today;
+    }
+
+    private string TruncateName(string name, int max) =>
+        name.Length <= max ? name : name.Substring(0, max) + "…";
+
+    public class HolidayItem
+    {
+        public int Id { get; set; }
+        public DateTime Date { get; set; }
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Department { get; set; } = "All";
+    }
+}

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SMART HRMS SYSTEM.Server</RootNamespace>
+    <AssemblyName>$(AssemblyName.Replace(' ', '_'))</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="9.0.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Client\SMART HRMS SYSTEM.Client.csproj" />
+    <ProjectReference Include="..\Shared\SMART HRMS SYSTEM.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

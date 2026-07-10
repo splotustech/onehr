@@ -1,0 +1,105 @@
+is_global = true
+build_property.EnableAotAnalyzer = 
+build_property.EnableSingleFileAnalyzer = 
+build_property.EnableTrimAnalyzer = false
+build_property.IncludeAllContentForSelfExtract = 
+build_property.TargetFramework = net9.0
+build_property.TargetFramework = net9.0
+build_property.TargetPlatformMinVersion = 
+build_property.TargetPlatformMinVersion = 
+build_property.UsingMicrosoftNETSdkWeb = 
+build_property.UsingMicrosoftNETSdkWeb = 
+build_property.ProjectTypeGuids = 
+build_property.ProjectTypeGuids = 
+build_property.InvariantGlobalization = false
+build_property.InvariantGlobalization = false
+build_property.PlatformNeutralAssembly = 
+build_property.PlatformNeutralAssembly = 
+build_property.EnforceExtendedAnalyzerRules = 
+build_property.EnforceExtendedAnalyzerRules = 
+build_property._SupportedPlatformList = browser
+build_property._SupportedPlatformList = browser
+build_property.RootNamespace = SMART_HRMS_SYSTEM.Client
+build_property.RootNamespace = SMART_HRMS_SYSTEM.Client
+build_property.ProjectDir = D:\SMART HRMS SYSTEM\SMART HRMS SYSTEM\Client\
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = false
+build_property.RazorLangVersion = 9.0
+build_property.SupportLocalizedComponentNames = 
+build_property.GenerateRazorMetadataSourceChecksumAttributes = 
+build_property.MSBuildProjectDirectory = D:\SMART HRMS SYSTEM\SMART HRMS SYSTEM\Client
+build_property._RazorSourceGeneratorDebug = 
+build_property.EffectiveAnalysisLevelStyle = 9.0
+build_property.EnableCodeStyleSeverity = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/App.razor]
+build_metadata.AdditionalFiles.TargetPath = QXBwLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/MainLayout.razor]
+build_metadata.AdditionalFiles.TargetPath = TWFpbkxheW91dC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/AddLeaveRequest.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcQWRkTGVhdmVSZXF1ZXN0LnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/HolidaysCalander.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcSG9saWRheXNDYWxhbmRlci5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/HR Model/HRDallyAttendaceReport.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcSFIgTW9kZWxcSFJEYWxseUF0dGVuZGFjZVJlcG9ydC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/HR Model/LeaveRequest.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcSFIgTW9kZWxcTGVhdmVSZXF1ZXN0LnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/HR Model/MovementRegisterReport.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcSFIgTW9kZWxcTW92ZW1lbnRSZWdpc3RlclJlcG9ydC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/HR Model/OutpassRequest.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcSFIgTW9kZWxcT3V0cGFzc1JlcXVlc3QucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/HR Model/WFHDashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcSFIgTW9kZWxcV0ZIRGFzaGJvYXJkLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/Index.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcSW5kZXgucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/Login.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcTG9naW4ucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/ManualAttendance.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcTWFudWFsQXR0ZW5kYW5jZS5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/MyAttendanceReport.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcTXlBdHRlbmRhbmNlUmVwb3J0LnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/MyLeaveReport.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcTXlMZWF2ZVJlcG9ydC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/MyMovementRegisterReport.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcTXlNb3ZlbWVudFJlZ2lzdGVyUmVwb3J0LnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/MyOutpassReport.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcTXlPdXRwYXNzUmVwb3J0LnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/Pages/TeamLeaderLeaveRequest.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcVGVhbUxlYWRlckxlYXZlUmVxdWVzdC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/SMART HRMS SYSTEM/SMART HRMS SYSTEM/Client/_Imports.razor]
+build_metadata.AdditionalFiles.TargetPath = X0ltcG9ydHMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 

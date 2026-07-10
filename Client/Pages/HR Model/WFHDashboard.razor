@@ -1,0 +1,994 @@
+@page "/wfh-monitoring"
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager NavManager
+@using SMART_HRMS_SYSTEM.Shared.ViewModel
+@using System.Text
+
+<div class="wfh-page">
+
+    <!-- ── Page Header ──────────────────────────────────────────────────── -->
+    <div class="wfh-page-header">
+        <div>
+            <h4 class="page-title"><i class="bi bi-geo-alt-fill me-2 text-primary"></i>WFH Live Monitoring</h4>
+            <p class="page-subtitle">Real-time GPS tracking for Work From Home employees</p>
+        </div>
+        <div class="header-actions">
+            <span class="last-refresh-label"><i class="bi bi-clock me-1"></i>Last refresh: @LastRefreshTime</span>
+            <button class="btn-action btn-refresh" @onclick="LoadAll" disabled="@IsLoading">
+                <i class="bi bi-arrow-clockwise @(IsLoading ? "spin" : "")"></i> Refresh
+            </button>
+            <button class="btn-action btn-export" @onclick="ExportCSV">
+                <i class="bi bi-download"></i> Export CSV
+            </button>
+        </div>
+    </div>
+
+    <!-- ── Alert ────────────────────────────────────────────────────────── -->
+    @if (!string.IsNullOrEmpty(AlertMessage))
+    {
+        <div class="wfh-alert @AlertClass">
+            <i class="bi bi-info-circle me-2"></i>@AlertMessage
+            <button class="btn-close-alert" @onclick="() => AlertMessage = string.Empty">×</button>
+        </div>
+    }
+
+    <!-- ── Dashboard Cards ──────────────────────────────────────────────── -->
+    @if (Stats != null)
+    {
+        <div class="dashboard-cards">
+            <div class="dash-card card-total">
+                <div class="card-icon"><i class="bi bi-people-fill"></i></div>
+                <div class="card-data">
+                    <div class="card-value">@Stats.TotalWFHEmployees</div>
+                    <div class="card-label">Total WFH Today</div>
+                </div>
+            </div>
+            <div class="dash-card card-working">
+                <div class="card-icon"><i class="bi bi-house-check-fill"></i></div>
+                <div class="card-data">
+                    <div class="card-value">@Stats.CurrentlyWorking</div>
+                    <div class="card-label">Currently Working</div>
+                </div>
+            </div>
+            <div class="dash-card card-outside">
+                <div class="card-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                <div class="card-data">
+                    <div class="card-value">@Stats.CurrentlyOutside</div>
+                    <div class="card-label">Currently Outside</div>
+                </div>
+            </div>
+            <div class="dash-card card-returned">
+                <div class="card-icon"><i class="bi bi-arrow-return-left"></i></div>
+                <div class="card-data">
+                    <div class="card-value">@Stats.ReturnedEmployees</div>
+                    <div class="card-label">Returned</div>
+                </div>
+            </div>
+            <div class="dash-card card-autoout">
+                <div class="card-icon"><i class="bi bi-geo-alt"></i></div>
+                <div class="card-data">
+                    <div class="card-value">@Stats.TotalAutoOutEvents</div>
+                    <div class="card-label">Auto-Out Events</div>
+                </div>
+            </div>
+            <div class="dash-card card-autoreturn">
+                <div class="card-icon"><i class="bi bi-geo"></i></div>
+                <div class="card-data">
+                    <div class="card-value">@Stats.TotalAutoReturnEvents</div>
+                    <div class="card-label">Auto-Return Events</div>
+                </div>
+            </div>
+            <div class="dash-card card-duration">
+                <div class="card-icon"><i class="bi bi-stopwatch"></i></div>
+                <div class="card-data">
+                    <div class="card-value">@Stats.AverageOutsideDuration min</div>
+                    <div class="card-label">Avg. Outside Duration</div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- ── Filters ──────────────────────────────────────────────────────── -->
+    <div class="filter-section">
+        <div class="filter-row">
+            <div class="filter-group">
+                <label>From Date</label>
+                <input type="date" class="filter-input" @bind="FromDate" />
+            </div>
+            <div class="filter-group">
+                <label>To Date</label>
+                <input type="date" class="filter-input" @bind="ToDate" />
+            </div>
+            <div class="filter-group">
+                <label>Status</label>
+                <select class="filter-input" @bind="FilterStatus">
+                    <option value="">All Status</option>
+                    <option value="Inside">Inside</option>
+                    <option value="Outside">Outside</option>
+                    <option value="Returned">Returned</option>
+                    <option value="NotTracking">Not Tracking</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Search Employee</label>
+                <input type="text" class="filter-input" placeholder="Name / Code..." @bind="SearchText" @oninput="OnSearchChanged" />
+            </div>
+            <div class="filter-actions">
+                <button class="btn-filter-apply" @onclick="ApplyFilter"><i class="bi bi-search"></i> Search</button>
+                <button class="btn-filter-reset"  @onclick="ResetFilter"><i class="bi bi-x-circle"></i> Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Grid ─────────────────────────────────────────────────────────── -->
+    <div class="grid-section">
+        <div class="grid-header-bar">
+            <span class="grid-count">
+                <i class="bi bi-table me-1"></i>Showing @FilteredList.Count employees
+            </span>
+        </div>
+
+        @if (IsLoading)
+        {
+            <div class="grid-loading">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">Loading WFH data...</p>
+            </div>
+        }
+        else if (!FilteredList.Any())
+        {
+            <div class="grid-empty">
+                <i class="bi bi-person-x fs-1 text-muted"></i>
+                <p class="mt-2 text-muted">No WFH employees found for selected filters.</p>
+            </div>
+        }
+        else
+        {
+            <div class="grid-scroll">
+                <table class="wfh-table">
+                    <thead>
+                        <tr>
+                            <th @onclick="() => SortBy(nameof(WFHMonitoringListItem.EmployeeCode))" class="sortable">
+                                Emp. Code @SortIcon(nameof(WFHMonitoringListItem.EmployeeCode))
+                            </th>
+                            <th @onclick="() => SortBy(nameof(WFHMonitoringListItem.EmployeeName))" class="sortable">
+                                Name @SortIcon(nameof(WFHMonitoringListItem.EmployeeName))
+                            </th>
+                            <th>Department</th>
+                            <th>Designation</th>
+                            <th>Date</th>
+                            <th>Punch In</th>
+                            <th>Punch Out</th>
+                            <th @onclick="() => SortBy(nameof(WFHMonitoringListItem.CurrentStatus))" class="sortable">
+                                Status @SortIcon(nameof(WFHMonitoringListItem.CurrentStatus))
+                            </th>
+                            <th @onclick="() => SortBy(nameof(WFHMonitoringListItem.CurrentDistance))" class="sortable">
+                                Distance @SortIcon(nameof(WFHMonitoringListItem.CurrentDistance))
+                            </th>
+                            <th>Outside Since</th>
+                            <th>Returned At</th>
+                            <th>Outside Duration</th>
+                            <th>Auto-Out Count</th>
+                            <th>Last Updated</th>
+                            <th>Tracking</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in PagedList)
+                        {
+                            <tr class="@GetRowClass(row.CurrentStatus)" @onclick="() => OpenDetail(row)" style="cursor:pointer">
+                                <td><span class="emp-code">@(row.EmployeeCode ?? "-")</span></td>
+                                <td class="emp-name">@(row.EmployeeName ?? "-")</td>
+                                <td>@(row.Department ?? "-")</td>
+                                <td>@(row.Designation ?? "-")</td>
+                                <td>@(row.AttendanceDate?.ToString("dd MMM") ?? "-")</td>
+                                <td>@(row.PunchIn?.ToString("hh:mm tt") ?? "-")</td>
+                                <td>@(row.PunchOut?.ToString("hh:mm tt") ?? "Active")</td>
+                                <td><span class="status-badge @GetStatusBadge(row.CurrentStatus)">@(row.CurrentStatus ?? "-")</span></td>
+                                <td>@(row.CurrentDistance.HasValue ? $"{Math.Round(row.CurrentDistance.Value, 0)}m" : "-")</td>
+                                <td>@(row.OutsideSince?.ToString("hh:mm tt") ?? "-")</td>
+                                <td>@(row.ReturnedTime?.ToString("hh:mm tt") ?? "-")</td>
+                                <td>@(row.OutsideDurationMinutes > 0 ? $"{row.OutsideDurationMinutes} min" : "-")</td>
+                                <td><span class="badge-count">@row.TotalAutoOutCount</span></td>
+                                <td>@(row.LastUpdatedTime?.ToString("hh:mm:ss tt") ?? "-")</td>
+                                <td>
+                                    <span class="tracking-pill @GetTrackingPillClass(row.TrackingStatus)">
+                                        @if (row.TrackingStatus == "Signal Lost")
+                                        {
+                                            <i class="bi bi-wifi-off me-1"></i>
+                                        }
+                                        @(row.TrackingStatus ?? "N/A")
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn-detail" @onclick:stopPropagation="true" @onclick="() => OpenDetail(row)">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination-bar">
+                <span class="page-info">Page @CurrentPage of @TotalPages | @FilteredList.Count records</span>
+                <div class="page-buttons">
+                    <button class="page-btn" @onclick="PrevPage" disabled="@(CurrentPage == 1)"><i class="bi bi-chevron-left"></i></button>
+                    @for (int i = Math.Max(1, CurrentPage - 2); i <= Math.Min(TotalPages, CurrentPage + 2); i++)
+                    {
+                        var p = i;
+                        <button class="page-btn @(p == CurrentPage ? "active" : "")" @onclick="() => GoToPage(p)">@p</button>
+                    }
+                    <button class="page-btn" @onclick="NextPage" disabled="@(CurrentPage == TotalPages)"><i class="bi bi-chevron-right"></i></button>
+                </div>
+                <select class="page-size-select" @bind="PageSize" @bind:after="OnPageSizeChanged">
+                    <option value="10">10 / page</option>
+                    <option value="25">25 / page</option>
+                    <option value="50">50 / page</option>
+                    <option value="100">100 / page</option>
+                </select>
+            </div>
+        }
+    </div>
+
+</div>
+
+<!-- ── Detail Modal ─────────────────────────────────────────────────────── -->
+@if (ShowDetailModal && SelectedDetail != null)
+{
+    <div class="modal-overlay" @onclick="CloseDetail">
+        <div class="detail-modal" @onclick:stopPropagation="true">
+            <div class="detail-header">
+                <div>
+                    <h5 class="modal-title">
+                        <i class="bi bi-person-circle me-2"></i>@SelectedDetail.EmployeeName
+                    </h5>
+                    <small class="text-light">@SelectedDetail.EmployeeCode | @SelectedDetail.Department | @SelectedDetail.Designation</small>
+                </div>
+                <button class="btn-close-modal" @onclick="CloseDetail">×</button>
+            </div>
+
+            <div class="detail-body">
+                <!-- Info Cards -->
+                <div class="detail-info-grid">
+                    <div class="info-card">
+                        <i class="bi bi-calendar-check text-primary"></i>
+                        <div>
+                            <small>Date</small>
+                            <strong>@(SelectedDetail.AttendanceDate?.ToString("dd MMM yyyy") ?? "-")</strong>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <i class="bi bi-clock text-success"></i>
+                        <div>
+                            <small>Punch In</small>
+                            <strong>@(SelectedDetail.PunchIn?.ToString("hh:mm tt") ?? "-")</strong>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <i class="bi bi-clock-history text-danger"></i>
+                        <div>
+                            <small>Punch Out</small>
+                            <strong>@(SelectedDetail.PunchOut?.ToString("hh:mm tt") ?? "Active")</strong>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <i class="bi bi-geo-alt text-warning"></i>
+                        <div>
+                            <small>Status</small>
+                            <strong><span class="status-badge @GetStatusBadge(SelectedDetail.CurrentStatus)">@(SelectedDetail.CurrentStatus ?? "-")</span></strong>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <i class="bi bi-signpost text-info"></i>
+                        <div>
+                            <small>Distance</small>
+                            <strong>@(SelectedDetail.CurrentDistance.HasValue ? $"{Math.Round(SelectedDetail.CurrentDistance.Value, 0)}m" : "-")</strong>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <i class="bi bi-exclamation-triangle text-danger"></i>
+                        <div>
+                            <small>Auto-Out Count</small>
+                            <strong>@SelectedDetail.TotalAutoOutCount</strong>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <i class="bi bi-stopwatch text-secondary"></i>
+                        <div>
+                            <small>Outside Duration</small>
+                            <strong>@SelectedDetail.TotalOutsideDurationMinutes min</strong>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <i class="bi bi-phone text-muted"></i>
+                        <div>
+                            <small>Device</small>
+                            <strong>@(SelectedDetail.Browser ?? "-")</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="detail-tabs">
+                    <button class="tab-btn @(ActiveTab == "timeline" ? "active" : "")" @onclick='() => ActiveTab = "timeline"'>
+                        <i class="bi bi-clock-history"></i> Timeline
+                    </button>
+                    <button class="tab-btn @(ActiveTab == "events" ? "active" : "")" @onclick='() => ActiveTab = "events"'>
+                        <i class="bi bi-lightning"></i> Events (@SelectedDetail.Events.Count)
+                    </button>
+                    <button class="tab-btn @(ActiveTab == "gps" ? "active" : "")" @onclick='() => ActiveTab = "gps"'>
+                        <i class="bi bi-geo"></i> GPS History (@SelectedDetail.GpsPings.Count)
+                    </button>
+                    <button class="tab-btn @(ActiveTab == "map" ? "active" : "")" @onclick='() => ActiveTab = "map"'>
+                        <i class="bi bi-map"></i> Live Map
+                    </button>
+                    <button class="tab-btn @(ActiveTab == "notifications" ? "active" : "")" @onclick='() => ActiveTab = "notifications"'>
+                        <i class="bi bi-bell"></i> Notifications (@SelectedDetail.Notifications.Count)
+                    </button>
+                </div>
+
+                <!-- Timeline Tab -->
+                @if (ActiveTab == "timeline")
+                {
+                    <div class="tab-content">
+                        @if (!SelectedDetail.Timeline.Any())
+                        {
+                            <p class="text-muted text-center py-3">No timeline events found.</p>
+                        }
+                        else
+                        {
+                            <div class="timeline">
+                                @foreach (var item in SelectedDetail.Timeline)
+                                {
+                                    <div class="timeline-item">
+                                        <div class="timeline-dot @item.BadgeClass"></div>
+                                        <div class="timeline-content">
+                                            <div class="timeline-time">@item.Time.ToString("hh:mm tt")</div>
+                                            <div class="timeline-desc">
+                                                <i class="bi @item.IconClass me-1"></i>@item.Description
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- Events Tab -->
+                @if (ActiveTab == "events")
+                {
+                    <div class="tab-content">
+                        @if (!SelectedDetail.Events.Any())
+                        {
+                            <p class="text-muted text-center py-3">No Auto-Out / Auto-Return events today.</p>
+                        }
+                        else
+                        {
+                            @foreach (var evt in SelectedDetail.Events)
+                            {
+                                <div class="event-card @(evt.EventType == "AutoOut" ? "event-out" : "event-return")">
+                                    <div class="event-type-badge">
+                                        @if (evt.EventType == "AutoOut")
+                                        {
+                                            <span class="badge bg-danger"><i class="bi bi-geo-alt me-1"></i>Auto Out</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success"><i class="bi bi-house-check me-1"></i>Auto Return</span>
+                                        }
+                                    </div>
+                                    <div class="event-details">
+                                        <div class="event-row"><strong>Time:</strong> @evt.EventTime.ToString("hh:mm:ss tt")</div>
+                                        <div class="event-row"><strong>Distance:</strong> @Math.Round(evt.Distance, 0)m</div>
+                                        <div class="event-row"><strong>Location:</strong> @evt.Latitude.ToString("F6"), @evt.Longitude.ToString("F6")</div>
+                                        @if (!string.IsNullOrEmpty(evt.Reason))
+                                        {
+                                            <div class="event-row"><strong>Reason:</strong> @evt.Reason</div>
+                                        }
+                                        @if (evt.ReturnTime.HasValue)
+                                        {
+                                            <div class="event-row"><strong>Returned:</strong> @evt.ReturnTime.Value.ToString("hh:mm:ss tt")</div>
+                                        }
+                                        @if (evt.OutsideDurationMinutes.HasValue)
+                                        {
+                                            <div class="event-row"><strong>Duration:</strong> @evt.OutsideDurationMinutes min</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(evt.Browser))
+                                        {
+                                            <div class="event-row"><strong>Browser:</strong> @evt.Browser | @(evt.IpAddress ?? "")</div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+
+                <!-- GPS History Tab -->
+                @if (ActiveTab == "gps")
+                {
+                    <div class="tab-content gps-tab">
+                        @if (!SelectedDetail.GpsPings.Any())
+                        {
+                            <p class="text-muted text-center py-3">No GPS pings recorded yet.</p>
+                        }
+                        else
+                        {
+                            <div class="gps-table-wrap">
+                                <table class="gps-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Time</th>
+                                            <th>Latitude</th>
+                                            <th>Longitude</th>
+                                            <th>Distance</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @{ int gpsNo = 1; }
+                                        @foreach (var p in SelectedDetail.GpsPings.OrderByDescending(x => x.PingTime).Take(50))
+                                        {
+                                            <tr class="@(p.IsInsideRadius ? "" : "gps-row-outside")">
+                                                <td>@gpsNo++</td>
+                                                <td>@p.PingTime.ToString("hh:mm:ss tt")</td>
+                                                <td>@p.Latitude.ToString("F6")</td>
+                                                <td>@p.Longitude.ToString("F6")</td>
+                                                <td>@Math.Round(p.Distance, 0)m</td>
+                                                <td>
+                                                    @if (p.IsInsideRadius)
+                                                    {
+                                                        <span class="badge bg-success">Inside</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-danger">Outside</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                                @if (SelectedDetail.GpsPings.Count > 50)
+                                {
+                                    <p class="text-muted text-center small mt-1">Showing latest 50 of @SelectedDetail.GpsPings.Count pings.</p>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- Map Tab -->
+                @if (ActiveTab == "map")
+                {
+                    <div class="tab-content">
+                        @if (SelectedDetail.CurrentLat.HasValue && SelectedDetail.CurrentLong.HasValue)
+                        {
+                            <div class="map-container">
+                                <iframe
+                                    title="WFH Location Map"
+                                    src="@GetMapUrl()"
+                                    class="map-iframe"
+                                    loading="lazy"
+                                    referrerpolicy="no-referrer-when-downgrade"
+                                    allowfullscreen>
+                                </iframe>
+                                <div class="map-legend">
+                                    <div class="legend-item">
+                                        <span class="dot dot-blue"></span> Current Location (@SelectedDetail.CurrentLat?.ToString("F4"), @SelectedDetail.CurrentLong?.ToString("F4"))
+                                    </div>
+                                    @if (SelectedDetail.AssignedLat.HasValue)
+                                    {
+                                        <div class="legend-item">
+                                            <span class="dot dot-green"></span> Assigned WFH Location (@SelectedDetail.AssignedLat?.ToString("F4"), @SelectedDetail.AssignedLong?.ToString("F4"))
+                                        </div>
+                                    }
+                                    <div class="legend-item">
+                                        <span class="dot dot-orange"></span> Allowed Radius: @SelectedDetail.AllowedRadius m
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted text-center py-4"><i class="bi bi-geo-alt-fill fs-2"></i><br/>No location data available yet.</p>
+                        }
+                    </div>
+                }
+
+                <!-- Notifications Tab -->
+                @if (ActiveTab == "notifications")
+                {
+                    <div class="tab-content">
+                        @if (!SelectedDetail.Notifications.Any())
+                        {
+                            <p class="text-muted text-center py-3">No notifications sent today.</p>
+                        }
+                        else
+                        {
+                            @foreach (var notif in SelectedDetail.Notifications)
+                            {
+                                <div class="notif-card">
+                                    <div class="notif-header">
+                                        <span class="notif-type @(notif.NotificationType == "AutoOut" ? "type-out" : "type-return")">
+                                            @notif.NotificationType
+                                        </span>
+                                        <span class="notif-sent-to">To: @notif.SentTo</span>
+                                        <span class="notif-time">@notif.SentOn.ToString("hh:mm tt")</span>
+                                    </div>
+                                    <div class="notif-title">@notif.Title</div>
+                                    <div class="notif-body">@notif.Body</div>
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+/* ── Page Layout ─────────────────────────────────────────────── */
+.wfh-page { padding: 20px; background: #f1f5f9; min-height: 100vh; }
+
+.wfh-page-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+}
+.page-title { font-size: 20px; font-weight: 700; color: #1e293b; margin: 0; }
+.page-subtitle { font-size: 13px; color: #64748b; margin: 0; }
+.header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.last-refresh-label { font-size: 12px; color: #94a3b8; }
+
+.btn-action {
+    padding: 8px 16px; border: none; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;
+}
+.btn-refresh { background: #6366f1; color: white; }
+.btn-refresh:hover { background: #4f46e5; }
+.btn-export  { background: #10b981; color: white; }
+.btn-export:hover  { background: #059669; }
+.btn-action:disabled { opacity: 0.6; cursor: not-allowed; }
+.spin { animation: spin 1s linear infinite; }
+@@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Alert ───────────────────────────────────────────────────── */
+.wfh-alert {
+    padding: 12px 16px; border-radius: 8px; margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: space-between; font-size: 14px;
+}
+.wfh-alert.alert-danger  { background: #fee2e2; color: #991b1b; border-left: 4px solid #ef4444; }
+.wfh-alert.alert-success { background: #d1fae5; color: #065f46; border-left: 4px solid #10b981; }
+.wfh-alert.alert-info    { background: #e0f2fe; color: #0369a1; border-left: 4px solid #0ea5e9; }
+.btn-close-alert { background: none; border: none; font-size: 18px; cursor: pointer; color: inherit; }
+
+/* ── Dashboard Cards ──────────────────────────────────────────── */
+.dashboard-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 14px; margin-bottom: 20px;
+}
+.dash-card {
+    background: white; border-radius: 12px; padding: 16px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border-left: 4px solid transparent;
+}
+.dash-card .card-icon { font-size: 26px; }
+.dash-card .card-value { font-size: 26px; font-weight: 800; line-height: 1; }
+.dash-card .card-label { font-size: 11px; color: #64748b; font-weight: 600; margin-top: 2px; }
+
+.card-total    { border-color: #6366f1; } .card-total    .card-icon { color: #6366f1; }
+.card-working  { border-color: #10b981; } .card-working  .card-icon { color: #10b981; }
+.card-outside  { border-color: #ef4444; } .card-outside  .card-icon { color: #ef4444; }
+.card-returned { border-color: #3b82f6; } .card-returned .card-icon { color: #3b82f6; }
+.card-autoout  { border-color: #f59e0b; } .card-autoout  .card-icon { color: #f59e0b; }
+.card-autoreturn { border-color: #8b5cf6; } .card-autoreturn .card-icon { color: #8b5cf6; }
+.card-duration { border-color: #64748b; } .card-duration .card-icon { color: #64748b; }
+
+/* ── Filters ──────────────────────────────────────────────────── */
+.filter-section {
+    background: white; border-radius: 12px; padding: 16px;
+    margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.filter-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+.filter-group label { font-size: 11px; font-weight: 700; color: #64748b; }
+.filter-input {
+    padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px;
+    font-size: 13px; background: #f8fafc; min-width: 140px;
+}
+.filter-input:focus { outline: none; border-color: #6366f1; }
+.filter-actions { display: flex; gap: 8px; }
+.btn-filter-apply {
+    padding: 8px 16px; background: #6366f1; color: white;
+    border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+}
+.btn-filter-reset {
+    padding: 8px 12px; background: #f1f5f9; color: #475569;
+    border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+}
+
+/* ── Grid ──────────────────────────────────────────────────────── */
+.grid-section { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.grid-header-bar {
+    padding: 14px 20px; border-bottom: 1px solid #e2e8f0;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.grid-count { font-size: 13px; font-weight: 600; color: #475569; }
+.grid-loading, .grid-empty {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 60px 20px; color: #94a3b8;
+}
+.grid-scroll { overflow-x: auto; }
+
+.wfh-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.wfh-table thead th {
+    background: #f8fafc; padding: 12px 14px; text-align: left;
+    font-size: 11px; font-weight: 700; color: #64748b; white-space: nowrap;
+    border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 1;
+}
+.wfh-table thead th.sortable { cursor: pointer; user-select: none; }
+.wfh-table thead th.sortable:hover { background: #f1f5f9; color: #4f46e5; }
+.wfh-table tbody tr { border-bottom: 1px solid #f1f5f9; transition: background 0.15s; }
+.wfh-table tbody tr:hover { background: #f8fafc; }
+.wfh-table tbody td { padding: 10px 14px; color: #334155; white-space: nowrap; }
+
+.row-outside { background: #fff5f5 !important; }
+.row-outside:hover { background: #fee2e2 !important; }
+
+.emp-code { background: #ede9fe; color: #5b21b6; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.emp-name { font-weight: 600; }
+
+.status-badge {
+    padding: 3px 10px; border-radius: 20px; font-size: 11px;
+    font-weight: 700; white-space: nowrap;
+}
+.badge-inside   { background: #d1fae5; color: #065f46; }
+.badge-outside  { background: #fee2e2; color: #991b1b; }
+.badge-returned { background: #dbeafe; color: #1e40af; }
+.badge-default  { background: #f1f5f9; color: #475569; }
+
+.badge-count {
+    background: #f1f5f9; color: #334155; padding: 2px 8px;
+    border-radius: 12px; font-size: 12px; font-weight: 700;
+}
+.tracking-pill {
+    padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+}
+.tracking-active      { background: #d1fae5; color: #065f46; }
+.tracking-off         { background: #f1f5f9; color: #64748b; }
+.tracking-signal-lost { background: #fef3c7; color: #92400e; animation: blink-warn 2s infinite; }
+@@keyframes blink-warn { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+
+.btn-detail {
+    background: #6366f1; color: white; border: none;
+    padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.btn-detail:hover { background: #4f46e5; }
+
+/* ── Pagination ────────────────────────────────────────────────── */
+.pagination-bar {
+    padding: 12px 20px; border-top: 1px solid #f1f5f9;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+}
+.page-info { font-size: 13px; color: #64748b; }
+.page-buttons { display: flex; gap: 4px; }
+.page-btn {
+    width: 32px; height: 32px; border: 1px solid #e2e8f0; background: white;
+    border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+}
+.page-btn:hover:not(:disabled) { background: #6366f1; color: white; border-color: #6366f1; }
+.page-btn.active { background: #6366f1; color: white; border-color: #6366f1; }
+.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.page-size-select { padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; }
+
+/* ── Detail Modal ──────────────────────────────────────────────── */
+.modal-overlay {
+    position: fixed; inset: 0; background: rgba(15,23,42,0.6);
+    z-index: 1100; display: flex; align-items: flex-start; justify-content: center;
+    padding: 20px; overflow-y: auto;
+}
+.detail-modal {
+    background: white; border-radius: 16px; width: 100%; max-width: 900px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2); margin: auto;
+}
+.detail-header {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: white; padding: 20px 24px; border-radius: 16px 16px 0 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+}
+.modal-title { font-size: 17px; font-weight: 700; margin: 0; }
+.btn-close-modal {
+    background: rgba(255,255,255,0.2); border: none; color: white;
+    width: 32px; height: 32px; border-radius: 50%; font-size: 20px; cursor: pointer;
+}
+.detail-body { padding: 20px 24px; }
+
+.detail-info-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 20px;
+}
+.info-card {
+    background: #f8fafc; border-radius: 10px; padding: 12px;
+    display: flex; align-items: center; gap: 10px;
+}
+.info-card i { font-size: 20px; }
+.info-card small { display: block; font-size: 10px; color: #64748b; font-weight: 600; }
+.info-card strong { font-size: 13px; font-weight: 700; color: #1e293b; }
+
+/* ── Tabs ──────────────────────────────────────────────────────── */
+.detail-tabs {
+    display: flex; gap: 4px; border-bottom: 2px solid #e2e8f0; margin-bottom: 16px; flex-wrap: wrap;
+}
+.tab-btn {
+    padding: 8px 14px; border: none; background: transparent;
+    font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer; border-radius: 6px 6px 0 0;
+    display: flex; align-items: center; gap: 6px;
+}
+.tab-btn:hover  { color: #6366f1; }
+.tab-btn.active { color: #6366f1; border-bottom: 2px solid #6366f1; }
+.tab-content { max-height: 380px; overflow-y: auto; padding: 4px; }
+
+/* ── Timeline ──────────────────────────────────────────────────── */
+.timeline { padding: 8px 0; }
+.timeline-item { display: flex; gap: 16px; margin-bottom: 16px; }
+.timeline-dot {
+    width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+    margin-top: 4px; box-shadow: 0 0 0 3px rgba(255,255,255,0.6);
+}
+.bg-success { background: #10b981; }
+.bg-danger  { background: #ef4444; }
+.bg-primary { background: #6366f1; }
+.bg-secondary { background: #64748b; }
+.timeline-time { font-size: 11px; color: #94a3b8; font-weight: 600; }
+.timeline-desc { font-size: 13px; font-weight: 600; color: #334155; }
+
+/* ── Events ────────────────────────────────────────────────────── */
+.event-card {
+    border-radius: 10px; padding: 14px; margin-bottom: 10px;
+    border-left: 4px solid transparent;
+}
+.event-out    { background: #fff5f5; border-color: #ef4444; }
+.event-return { background: #f0fdf4; border-color: #10b981; }
+.event-type-badge { margin-bottom: 8px; }
+.event-details { font-size: 13px; }
+.event-row { margin-bottom: 4px; color: #475569; }
+.event-row strong { color: #334155; }
+
+/* ── GPS Table ─────────────────────────────────────────────────── */
+.gps-tab { padding: 0; }
+.gps-table-wrap { overflow-x: auto; }
+.gps-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.gps-table th { background: #f8fafc; padding: 8px 12px; font-weight: 700; color: #64748b; border-bottom: 1px solid #e2e8f0; }
+.gps-table td { padding: 7px 12px; border-bottom: 1px solid #f1f5f9; }
+.gps-row-outside { background: #fff5f5; }
+
+/* ── Map ────────────────────────────────────────────────────────── */
+.map-container { position: relative; }
+.map-iframe { width: 100%; height: 280px; border-radius: 10px; border: 1px solid #e2e8f0; }
+.map-legend { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 10px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #475569; }
+.dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.dot-blue   { background: #3b82f6; }
+.dot-green  { background: #10b981; }
+.dot-orange { background: #f59e0b; }
+
+/* ── Notifications ─────────────────────────────────────────────── */
+.notif-card { background: #f8fafc; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+.notif-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 12px; }
+.notif-type { padding: 2px 8px; border-radius: 20px; font-weight: 700; font-size: 11px; }
+.type-out    { background: #fee2e2; color: #991b1b; }
+.type-return { background: #d1fae5; color: #065f46; }
+.notif-sent-to { color: #64748b; }
+.notif-time   { color: #94a3b8; margin-left: auto; }
+.notif-title  { font-weight: 700; font-size: 13px; color: #1e293b; margin-bottom: 4px; }
+.notif-body   { font-size: 12px; color: #475569; white-space: pre-line; }
+</style>
+
+@code {
+    private List<WFHMonitoringListItem> AllList = new();
+    private List<WFHMonitoringListItem> FilteredList = new();
+    private List<WFHMonitoringListItem> PagedList = new();
+    private WFHDashboardStats? Stats;
+    private WFHEmployeeDetail? SelectedDetail;
+
+    private bool IsLoading = false;
+    private bool ShowDetailModal = false;
+    private string ActiveTab = "timeline";
+    private string AlertMessage = "";
+    private string AlertClass = "alert-info";
+    private string LastRefreshTime = "-";
+
+    // Filters
+    private DateTime FromDate = DateTime.Today;
+    private DateTime ToDate = DateTime.Today;
+    private string FilterStatus = "";
+    private string SearchText = "";
+
+    // Sorting
+    private string SortColumn = "";
+    private bool SortAscending = true;
+
+    // Pagination
+    private int CurrentPage = 1;
+    private int PageSize = 25;
+    private int TotalPages => FilteredList.Count == 0 ? 1 : (int)Math.Ceiling((double)FilteredList.Count / PageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAll();
+    }
+
+    private async Task LoadAll()
+    {
+        IsLoading = true;
+        try
+        {
+            var dashTask = Http.GetFromJsonAsync<WFHDashboardStats>($"api/wfh/dashboard?date={DateTime.Today:yyyy-MM-dd}");
+            var listTask = Http.GetFromJsonAsync<List<WFHMonitoringListItem>>(
+                $"api/wfh/list?fromDate={FromDate:yyyy-MM-dd}&toDate={ToDate:yyyy-MM-dd}");
+
+            await Task.WhenAll(dashTask, listTask);
+
+            Stats   = dashTask.Result;
+            AllList = listTask.Result ?? new();
+            LastRefreshTime = DateTime.Now.ToString("hh:mm:ss tt");
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            AlertMessage = "Error loading data: " + ex.Message;
+            AlertClass = "alert-danger";
+        }
+        finally { IsLoading = false; }
+    }
+
+    private void ApplyFilter()
+    {
+        var q = AllList.AsEnumerable();
+
+        if (!string.IsNullOrEmpty(FilterStatus))
+            q = q.Where(x => x.CurrentStatus == FilterStatus);
+
+        if (!string.IsNullOrWhiteSpace(SearchText))
+        {
+            var s = SearchText.Trim().ToLower();
+            q = q.Where(x =>
+                (x.EmployeeName ?? "").ToLower().Contains(s) ||
+                (x.EmployeeCode ?? "").ToLower().Contains(s) ||
+                (x.Department   ?? "").ToLower().Contains(s));
+        }
+
+        // Sort
+        if (!string.IsNullOrEmpty(SortColumn))
+        {
+            q = SortColumn switch
+            {
+                nameof(WFHMonitoringListItem.EmployeeCode)   => SortAscending ? q.OrderBy(x => x.EmployeeCode)   : q.OrderByDescending(x => x.EmployeeCode),
+                nameof(WFHMonitoringListItem.EmployeeName)   => SortAscending ? q.OrderBy(x => x.EmployeeName)   : q.OrderByDescending(x => x.EmployeeName),
+                nameof(WFHMonitoringListItem.CurrentStatus)  => SortAscending ? q.OrderBy(x => x.CurrentStatus)  : q.OrderByDescending(x => x.CurrentStatus),
+                nameof(WFHMonitoringListItem.CurrentDistance)=> SortAscending ? q.OrderBy(x => x.CurrentDistance): q.OrderByDescending(x => x.CurrentDistance),
+                _ => q
+            };
+        }
+
+        FilteredList = q.ToList();
+        CurrentPage = 1;
+        UpdatePage();
+    }
+
+    private void ResetFilter()
+    {
+        FromDate = DateTime.Today;
+        ToDate = DateTime.Today;
+        FilterStatus = "";
+        SearchText = "";
+        SortColumn = "";
+        SortAscending = true;
+        ApplyFilter();
+    }
+
+    private void OnSearchChanged(ChangeEventArgs e) { SearchText = e.Value?.ToString() ?? ""; }
+
+    private void UpdatePage()
+    {
+        PagedList = FilteredList
+            .Skip((CurrentPage - 1) * PageSize)
+            .Take(PageSize)
+            .ToList();
+    }
+
+    private void SortBy(string column)
+    {
+        if (SortColumn == column) SortAscending = !SortAscending;
+        else { SortColumn = column; SortAscending = true; }
+        ApplyFilter();
+    }
+
+    private string SortIcon(string column)
+    {
+        if (SortColumn != column) return "";
+        return SortAscending ? " ▲" : " ▼";
+    }
+
+    private void PrevPage() { if (CurrentPage > 1) { CurrentPage--; UpdatePage(); } }
+    private void NextPage() { if (CurrentPage < TotalPages) { CurrentPage++; UpdatePage(); } }
+    private void GoToPage(int p) { CurrentPage = p; UpdatePage(); }
+    private void OnPageSizeChanged() { CurrentPage = 1; UpdatePage(); }
+
+    private async Task OpenDetail(WFHMonitoringListItem row)
+    {
+        try
+        {
+            SelectedDetail = await Http.GetFromJsonAsync<WFHEmployeeDetail>(
+                $"api/wfh/details/{row.EmployeeId}?date={row.AttendanceDate:yyyy-MM-dd}");
+            ActiveTab = "timeline";
+            ShowDetailModal = true;
+        }
+        catch (Exception ex)
+        {
+            AlertMessage = "Error loading details: " + ex.Message;
+            AlertClass = "alert-danger";
+        }
+    }
+
+    private void CloseDetail() { ShowDetailModal = false; SelectedDetail = null; }
+
+    private string GetRowClass(string? status) =>
+        status == "Outside" ? "row-outside" : "";
+
+    private string GetStatusBadge(string? status) => status switch
+    {
+        "Inside"      => "badge-inside",
+        "Outside"     => "badge-outside",
+        "Returned"    => "badge-returned",
+        _             => "badge-default"
+    };
+
+    private string GetTrackingPillClass(string? ts) => ts switch
+    {
+        "Active"       => "tracking-active",
+        "Signal Lost"  => "tracking-signal-lost",
+        _              => "tracking-off"
+    };
+
+    private string GetMapUrl()
+    {
+        if (SelectedDetail?.CurrentLat == null) return "";
+        double lat = SelectedDetail.CurrentLat.Value;
+        double lon = SelectedDetail.CurrentLong ?? 0;
+        double span = 0.002; // ~200m view
+        return $"https://www.openstreetmap.org/export/embed.html?" +
+               $"bbox={lon - span},{lat - span},{lon + span},{lat + span}" +
+               $"&layer=mapnik&marker={lat},{lon}";
+    }
+
+    private async Task ExportCSV()
+    {
+        try
+        {
+            var url = $"api/wfh/exportExcel?fromDate={FromDate:yyyy-MM-dd}&toDate={ToDate:yyyy-MM-dd}";
+            var bytes = await Http.GetByteArrayAsync(url);
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("downloadFile", $"WFH_Tracking_{FromDate:yyyyMMdd}.csv", "text/csv", base64);
+            AlertMessage = "Export downloaded successfully.";
+            AlertClass = "alert-success";
+        }
+        catch (Exception ex)
+        {
+            AlertMessage = "Export failed: " + ex.Message;
+            AlertClass = "alert-danger";
+        }
+    }
+}

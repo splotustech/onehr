@@ -1,0 +1,856 @@
+﻿@page "/mymovement-register-report"
+@using SMART_HRMS_SYSTEM.Shared.ViewModel
+@using SMART_HRMS_SYSTEM.Shared.Models
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager NavManager
+
+<div class="report-wrapper">
+    <div class="report-container">
+
+        <!-- Header -->
+        <div class="report-header">
+            <h2> My Movement Register Log</h2>
+            <p>Monitor short breaks, tea, and lunch movements Details.</p>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-row mb-4">
+            <div class="stat-card stat-total shadow-sm">
+                <div class="stat-icon"><i class="bi bi-person-walking"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Total Movements</p>
+                    <h3 class="stat-count">@TotalRequests</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-late shadow-sm" style="border-left: 4px solid #f59e0b;">
+                <div class="stat-icon" style="background: #fef3c7; color: #d97706;"><i class="bi bi-door-open-fill"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Currently Outside</p>
+                    <h3 class="stat-count text-warning">@OutsideCount</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-present shadow-sm">
+                <div class="stat-icon"><i class="bi bi-check-circle-fill"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Returned</p>
+                    <h3 class="stat-count">@ReturnedCount</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-absent shadow-sm">
+                <div class="stat-icon"><i class="bi bi-cup-hot-fill"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Tea / Lunch Breaks</p>
+                    <h3 class="stat-count">@TeaBreakCount</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Card -->
+        <div class="filter-card shadow-sm mb-4">
+            <div class="filter-row">
+                <div class="filter-item">
+                    <label class="filter-label">VIEW TYPE</label>
+                    <select class="form-select custom-select" @bind="FilterType" @bind:after="LoadRecords">
+                        <option value="Daily">Daily View</option>
+                        <option value="Monthly">Monthly View</option>
+                    </select>
+                </div>
+
+                @if (FilterType == "Daily")
+                {
+                    <div class="filter-item">
+                        <label class="filter-label">SELECT DATE</label>
+                        <input type="date" class="form-control custom-select"
+                               value="@SelectedDate.ToString("yyyy-MM-dd")"
+                               @onchange="OnDateChanged" />
+                    </div>
+                }
+                else
+                {
+                    <div class="filter-item">
+                        <label class="filter-label">MONTH</label>
+                        <select class="form-select custom-select" @bind="SelectedMonth" @bind:after="LoadRecords">
+                            @for (int m = 1; m <= 12; m++)
+                            {
+                                <option value="@m">@System.Globalization.DateTimeFormatInfo.CurrentInfo.GetMonthName(m)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="filter-item">
+                        <label class="filter-label">YEAR</label>
+                        <select class="form-select custom-select" @bind="SelectedYear" @bind:after="LoadRecords">
+                            @for (int i = DateTime.Now.Year; i >= 2024; i--)
+                            {
+                                <option value="@i">@i</option>
+                            }
+                        </select>
+                    </div>
+                }
+
+                @* <div class="filter-item search-item">
+                    <label class="filter-label">SEARCH EMPLOYEE</label>
+                    <div class="search-box">
+                        <i class="bi bi-search search-icon"></i>
+                        <input class="form-control custom-select pl-search" style="width:70%"
+                               placeholder="Name..."
+                               value="@SearchText"
+                               @oninput="OnSearchInput" />
+                    </div>
+                </div> *@
+
+                <div class="filter-item btn-item">
+                    <label class="filter-label d-none d-md-block">&nbsp;</label>
+                    <button class="btn-search w-100" @onclick="ResetFilters" disabled="@IsLoading">
+                        <i class="bi bi-arrow-repeat me-1"></i> Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="report-table-wrapper">
+            @if (IsLoading)
+            {
+                <div class="empty-state"><h5>Loading Data...</h5></div>
+            }
+            else if (!FilteredRecords.Any())
+            {
+                <div class="empty-state"><h5>No Records Found</h5></div>
+            }
+            else
+            {
+                <table class="table modern-table">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Date / Times</th>
+                            <th>Reason</th>
+                            <th>Duration</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in FilteredRecords)
+                        {
+                            <tr>
+                                <td data-label="Employee">
+                                    <div class="employee-cell text-value">
+                                        <div class="avatar">@GetInitials(r.EmpName)</div>
+                                        <div>
+                                            <span class="fw-bold d-block text-dark">@r.EmpName</span>
+                                            <small class="text-muted">@r.Designation</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td data-label="Date & Times">
+                                    <div class="text-value">
+                                        <span class="fw-bold text-dark">@r.LogDate.ToString("dd MMM yyyy")</span><br />
+                                        <small class="text-muted">
+                                            Out: <b class="text-danger">@GetTimeStr(r.ExitTime)</b> |
+                                            In: <b class="text-success">@GetTimeStr(r.EntryTime)</b>
+                                        </small>
+                                    </div>
+                                </td>
+                                <td data-label="Reason">
+                                    <span class="text-value text-muted">@r.Reason</span>
+                                </td>
+                                <td data-label="Duration">
+                                    <span class="text-value fw-bold text-primary">
+                                        @(r.DurationMinutes.HasValue ? $"{r.DurationMinutes} min" : "---")
+                                    </span>
+                                </td>
+                                <td data-label="Status">
+                                    <span class="status-badge @(r.EntryTime.HasValue ? "bg-present" : "bg-late")">
+                                        @(r.EntryTime.HasValue ? "Returned" : "Outside")
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    /* ===== GLOBAL (Inherited from your system) ===== */
+    .report-wrapper {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #f3f4f6 0%, #fefefe 100%);
+        padding: 30px 15px;
+        font-family: 'Inter', 'Segoe UI', sans-serif;
+    }
+
+    .btn-view {
+        background: #f1f5f9;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #475569;
+    }
+
+    .report-container {
+        max-width: 1200px;
+        margin: auto;
+    }
+
+    .report-header h2 {
+        font-weight: 800;
+        font-size: 26px;
+        color: #0f172a;
+        margin-bottom: 5px;
+    }
+
+    .report-header p {
+        color: #64748b;
+        font-size: 14px;
+        margin-bottom: 25px;
+    }
+
+    /* ===== STATS ROW ===== */
+    .stats-row {
+        display: flex;
+        gap: 15px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 5px;
+    }
+
+        .stats-row::-webkit-scrollbar {
+            display: none;
+        }
+
+    .stat-card {
+        background: #ffffff;
+        padding: 20px;
+        border-radius: 16px;
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        border: none;
+        flex: 1;
+        min-width: 150px;
+    }
+
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        font-size: 22px;
+        flex-shrink: 0;
+    }
+
+    .stat-total .stat-icon {
+        background: #eff6ff;
+        color: #4f46e5;
+    }
+
+    .stat-present .stat-icon {
+        background: #dcfce7;
+        color: #16a34a;
+    }
+
+    .stat-late .stat-icon {
+        background: #fef3c7;
+        color: #d97706;
+    }
+
+    .stat-absent .stat-icon {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+
+    .stat-title {
+        font-size: 11px;
+        color: #64748b;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin: 0 0 2px 0;
+    }
+
+    .stat-count {
+        font-size: 24px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    /* ===== FILTER CARD (Fixed Overlap Issue) ===== */
+    .filter-card {
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 20px;
+        border: none;
+    }
+
+    .filter-row {
+        display: flex;
+        gap: 15px;
+        align-items: flex-end;
+        flex-wrap: wrap; /* Changed to wrap to prevent squishing */
+    }
+
+    .filter-item {
+        flex: 1;
+        min-width: 150px; /* Minimum width before it wraps */
+    }
+
+    .search-item {
+        flex: 2; /* Make search box slightly larger */
+        min-width: 200px;
+    }
+
+    .btn-item {
+        flex: 0 0 120px; /* Fixed width for button so it never gets crushed */
+    }
+
+    .filter-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .custom-select {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        padding: 10px 9px;
+        font-weight: 500;
+        font-size: 14px;
+        background: #f8fafc;
+        color: #0f172a;
+        transition: all 0.2s ease;
+    }
+
+        .custom-select:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+            background: #fff;
+            outline: none;
+        }
+
+    .btn-search {
+        background: #f8fafc;
+        color: #0f172a;
+        border: 1px solid #e2e8f0;
+        padding: 10px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-search:hover:not(:disabled) {
+            background: #e2e8f0;
+        }
+
+    .search-box {
+        position: relative;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #94a3b8;
+    }
+
+    .pl-search {
+        padding-left: 35px;
+        width: 100%;
+    }
+
+    /* ===== TABLE WRAPPER ===== */
+    .modern-table {
+        width: 100%;
+        background: white;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        margin-bottom: 0;
+    }
+
+        .modern-table thead {
+            background: #f8fafc;
+        }
+
+        .modern-table th {
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            padding: 16px;
+            text-transform: uppercase;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .modern-table td {
+            padding: 16px;
+            font-size: 14px;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            color: #334155;
+        }
+
+        .modern-table tbody tr:hover {
+            background: #f8fafc;
+        }
+
+    /* Table Components */
+    .employee-cell {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #3b82f6);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+
+    .status-badge {
+        padding: 6px 12px;
+        border-radius: 30px;
+        font-size: 12px;
+        font-weight: 700;
+        display: inline-block;
+        text-align: center;
+        min-width: 80px;
+    }
+
+    .bg-present {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .bg-late {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .bg-absent {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .bg-secondary {
+        background: #f1f5f9;
+        color: #64748b;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .btn-action {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        border: none;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: 0.2s;
+        color: white;
+        font-size: 18px; /* Slightly larger icon */
+    }
+
+    .btn-approve {
+        background: #10b981;
+    }
+
+        .btn-approve:hover {
+            background: #059669;
+        }
+
+    .btn-reject {
+        background: #ef4444;
+    }
+
+        .btn-reject:hover {
+            background: #dc2626;
+        }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: white;
+        border-radius: 16px;
+    }
+
+    /* ===== MODALS UI ===== */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(15, 23, 42, 0.65);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+    }
+
+    .confirm-modal {
+        background: #fff;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 350px;
+        padding: 25px 20px;
+        text-align: center;
+        animation: fadeIn 0.3s ease;
+    }
+
+    .modal-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        margin: 0 auto 15px auto;
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 20px;
+    }
+
+    .btn-modal-cancel, .btn-modal-confirm {
+        flex: 1;
+        padding: 12px;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        transition: 0.2s;
+    }
+
+    .btn-modal-cancel {
+        background: #ff4343bf;
+        color: #475569;
+    }
+
+        .btn-modal-cancel:hover {
+            background: #cbd5e1;
+        }
+
+    .btn-modal-confirm {
+        color: white;
+        background-color: #52b67e;
+    }
+
+    /* Toast */
+    .custom-toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        color: white;
+        z-index: 3000;
+        animation: slideUp 0.3s ease;
+    }
+
+    .toast-success {
+        background: #10b981;
+    }
+
+    .toast-error {
+        background: #ef4444;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            transform: translateY(20px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    @@keyframes slideUp {
+        from {
+            transform: translateY(50px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    /* =========================================
+                   📱 MOBILE RESPONSIVE
+                ========================================= */
+    @@media (max-width: 992px) {
+        .filter-row {
+            flex-wrap: wrap;
+        }
+
+        .filter-item {
+            flex: 1 1 45%;
+        }
+
+        .btn-item {
+            flex: 1 1 100%;
+            margin-top: 5px;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .report-wrapper {
+            padding: 15px 10px;
+        }
+
+        .filter-row {
+            flex-wrap: wrap;
+        }
+
+        .filter-item {
+            flex: 1 1 100%;
+        }
+
+        .search-item {
+            flex: 1 1 100%;
+        }
+
+        .btn-item {
+            flex: 1 1 100%;
+            margin-top: 5px;
+        }
+
+        .custom-select {
+            padding: 8px 10px;
+            font-size: 13px;
+        }
+
+        .stat-card {
+            padding: 15px 10px;
+            flex-direction: column;
+            text-align: center;
+            gap: 8px;
+        }
+
+        .report-table-wrapper {
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .modern-table thead {
+            display: none;
+        }
+
+        .modern-table, .modern-table tbody, .modern-table tr, .modern-table td {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+            .modern-table tr {
+                margin-bottom: 15px;
+                background: white;
+                padding: 15px;
+                border-radius: 16px;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+                border: 1px solid #e2e8f0;
+            }
+
+            .modern-table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px 0;
+                border: none;
+                font-size: 13px;
+                gap: 15px;
+                text-align: right;
+            }
+
+                .modern-table td::before {
+                    content: attr(data-label);
+                    font-weight: 600;
+                    color: #64748b;
+                    min-width: 100px;
+                    text-transform: uppercase;
+                    font-size: 11px;
+                    text-align: left;
+                }
+        /* Adjustments for Outpass specific cells */
+        .text-value {
+            text-align: right;
+            word-wrap: break-word;
+            white-space: normal;
+            max-width: 65%;
+            display: block;
+        }
+
+        .employee-cell {
+            justify-content: flex-end;
+            text-align: right;
+        }
+
+        .action-buttons {
+            justify-content: flex-end !important;
+            width: 100%;
+        }
+
+        .confirm-modal {
+            padding: 25px 15px;
+        }
+    }
+</style>
+
+
+@code {
+    private bool IsLoading = false;
+    private string FilterType = "Daily";
+    private DateTime SelectedDate = DateTime.Today;
+    private int SelectedMonth = DateTime.Today.Month;
+    private int SelectedYear = DateTime.Today.Year;
+    private string SearchText = "";
+    private string EmployeeName = string.Empty;
+    private string EmployeeId = string.Empty;
+
+    private int TotalRequests, OutsideCount, ReturnedCount, TeaBreakCount;
+
+    private List<MovementViewModel> AllRecords = new();
+    private List<MovementViewModel> FilteredRecords = new();
+
+    protected override async Task OnInitializedAsync() => await LoadRecords();
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                EmployeeName = await JS.InvokeAsync<string>("localStorage.getItem", "empName");
+                if (string.IsNullOrEmpty(EmployeeName))
+                {
+                    NavManager.NavigateTo("/", true);
+                }
+                var empid = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+                if (!string.IsNullOrEmpty(empid)) EmployeeId = empid;
+                StateHasChanged();
+            }
+            catch
+            {
+            }
+        }
+    }
+    private async Task LoadRecords()
+    {
+        IsLoading = true;
+        try
+        {
+            // १. आधी empId मिळवा आणि त्याला int मध्ये कन्व्हर्ट करा
+            var empIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+            int currentEmpId = string.IsNullOrEmpty(empIdStr) ? 0 : int.Parse(empIdStr);
+
+            string url = $"api/Movement/GetMovementRecords?filterType={FilterType}";
+            url += FilterType == "Daily" ? $"&date={SelectedDate:yyyy-MM-dd}" : $"&month={SelectedMonth}&year={SelectedYear}";
+
+            var response = await Http.GetFromJsonAsync<List<MovementViewModel>>(url);
+
+            if (response != null)
+            {
+                // २. तुलना करताना int vs int करा
+                AllRecords = response.Where(t => t.EmpId == currentEmpId).ToList();
+            }
+
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Error: " + ex.Message);
+            AllRecords = new();
+        }
+        finally { IsLoading = false; }
+    }
+
+    private void ApplyFilters()
+    {
+        var q = AllRecords.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(SearchText))
+            q = q.Where(x => x.EmpName.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+
+        FilteredRecords = q.ToList();
+
+        // Stats Calculation
+        TotalRequests = FilteredRecords.Count;
+        OutsideCount = FilteredRecords.Count(x => !x.EntryTime.HasValue);
+        ReturnedCount = FilteredRecords.Count(x => x.EntryTime.HasValue);
+        TeaBreakCount = FilteredRecords.Count(x =>
+     !string.IsNullOrEmpty(x.Reason) &&
+     (x.Reason.Contains("Tea", StringComparison.OrdinalIgnoreCase) ||
+      x.Reason.Contains("Lunch", StringComparison.OrdinalIgnoreCase)));
+        StateHasChanged(); // UI रिफ्रेश करण्यासाठी
+    }
+
+    private void OnSearchInput(ChangeEventArgs e) { SearchText = e.Value?.ToString() ?? ""; ApplyFilters(); }
+    private async Task OnDateChanged(ChangeEventArgs e) { if (DateTime.TryParse(e.Value?.ToString(), out var d)) { SelectedDate = d; await LoadRecords(); } }
+    private void ResetFilters() { SearchText = ""; FilterType = "Daily"; SelectedDate = DateTime.Today; ApplyFilters(); }
+
+    private string GetTimeStr(TimeSpan? ts) => ts.HasValue ? DateTime.Today.Add(ts.Value).ToString("hh:mm tt") : "-";
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "U";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return (parts[0].Substring(0, 1) + parts[1].Substring(0, 1)).ToUpper();
+        return parts[0].Substring(0, 1).ToUpper();
+    }
+
+    // ViewModel (Should match backend)
+    public class MovementViewModel
+    {
+        public int EmpId { get; set; }
+        public string EmpName { get; set; }
+        public string Designation { get; set; }
+        public DateTime LogDate { get; set; }
+        public TimeSpan? ExitTime { get; set; }
+        public TimeSpan? EntryTime { get; set; }
+        public int? DurationMinutes { get; set; }
+        public string Reason { get; set; }
+    }
+}

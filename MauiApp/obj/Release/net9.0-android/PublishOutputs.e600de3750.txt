@@ -1,0 +1,4 @@
+D:\SMART HRMS SYSTEM\SMART HRMS SYSTEM\MauiApp\bin\Release\net9.0-android\publish\com.splotuss.smarthrms-Signed.aab
+D:\SMART HRMS SYSTEM\SMART HRMS SYSTEM\MauiApp\bin\Release\net9.0-android\publish\com.splotuss.smarthrms.aab
+D:\SMART HRMS SYSTEM\SMART HRMS SYSTEM\MauiApp\bin\Release\net9.0-android\publish\com.splotuss.smarthrms-Signed.apk
+D:\SMART HRMS SYSTEM\SMART HRMS SYSTEM\MauiApp\bin\Release\net9.0-android\publish\_Microsoft.Android.Resource.Designer.dll

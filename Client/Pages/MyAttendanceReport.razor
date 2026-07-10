@@ -1,0 +1,590 @@
+﻿@page "/my-report"
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager NavManager
+@using SMART_HRMS_SYSTEM.Shared.ViewModel
+
+<div class="report-wrapper">
+    <div class="report-container">
+        
+        <!-- Top Navigation -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <button class="btn-back" @onclick="GoBack">
+                <i class="oi oi-arrow-left"></i> Back to Attendance
+            </button>
+        </div>
+
+        <!-- Header -->
+        <div class="report-header">
+            <h2>My Attendance Report</h2>
+            <p>View your full month attendance and total working hours.</p>
+        </div>
+
+        <!-- Filter Card -->
+        <div class="filter-card shadow-sm">
+            <div class="filter-row">
+
+                <div class="filter-item">
+                    <label class="filter-label">SELECT MONTH</label>
+                    <div class="select-wrapper">
+                        <select class="form-select custom-select" @bind="SelectedMonth">
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="filter-item">
+                    <label class="filter-label">SELECT YEAR</label>
+                    <div class="select-wrapper">
+                        <select class="form-select custom-select" @bind="SelectedYear">
+                            @for (int i = DateTime.Now.Year + 2; i >= 2024; i--)
+                            {
+                                <option value="@i">@i</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="filter-item btn-item">
+                    <button class="btn-search w-100" @onclick="LoadReport" disabled="@IsLoading">
+                        @if (IsLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span> <span>Loading...</span>
+                        }
+                        else
+                        {
+                            <i class="oi oi-magnifying-glass d-none d-md-inline me-2"></i> <span>Get Report</span>
+                        }
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Error / Alert -->
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="alert alert-danger mt-4 rounded-3 d-flex align-items-center">
+                <i class="oi oi-warning me-2 fs-5"></i> @ErrorMessage
+            </div>
+        }
+
+        <!-- Data Grid -->
+        <div class="report-table-wrapper mt-4">
+            @if (Records == null)
+            {
+                <div class="empty-state shadow-sm">
+                    <div class="empty-icon placeholder-glow"><i class="oi oi-spreadsheet"></i></div>
+                    <h5>No Data Loaded</h5>
+                    <p>Select a month and year to view your attendance report.</p>
+                </div>
+            }
+            else
+            {
+                 <table class="table modern-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Day</th>
+                            <th>Punch In</th>
+                            <th>Punch Out</th>
+                            <th>Total Hours</th>
+                            <th>Status / Mode</th>
+                          <th>Attendance</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var r in Records)
+                        {
+                            <tr>
+                                <td data-label="Date"><span class="text-value">@r.Date</span></td>
+                                <td data-label="Day"><span class="text-value">@r.DayName</span></td>
+
+                                <td data-label="Punch In">
+                                    <span class="text-value @(r.PunchIn == "-" ? "text-blank" : "badge-in")">@r.PunchIn</span>
+                                </td>
+
+                                <td data-label="Punch Out">
+                                    <span class="text-value @GetPunchOutClass(r.PunchOut)">
+                                        @(string.IsNullOrEmpty(r.PunchOut) ? "-" : r.PunchOut)
+                                    </span>
+                                </td>
+
+                                <td data-label="Hours">
+                                    <span class="text-value @(r.TotalHours == "-" ? "text-blank" : "text-hours")">@r.TotalHours</span>
+                                </td>
+
+                                <td data-label="Status">
+                                    <span class="text-value @GetModeClass(r.WorkMode)">@r.WorkMode</span>
+                                </td>
+                                <td data-label="Attendance">
+    <span class="text-value @GetAttendanceClass(r.PunchIn)">
+        @GetAttendanceStatus(r.PunchIn, r.WorkMode)
+    </span>
+</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .badge-ontime {
+    background: #dcfce7;
+    color: #166534;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.badge-late {
+    background: #fee2e2;
+    color: #991b1b;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 12px;
+}
+/* ===== GLOBAL ===== */
+.report-wrapper {
+    min-height: 100vh;
+    background: #f8eefb; 
+    background: linear-gradient(135deg, #f3f4f6 0%, #fefefe 100%);
+    padding: 30px 15px;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+.report-container {
+    max-width: 1100px;
+    margin: auto;
+}
+
+/* ===== BACK BUTTON ===== */
+.btn-back {
+    background: #ffffff;
+    color: #1e293b;
+    border: 1px solid #e2e8f0;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.25s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.btn-back:hover {
+    background: #f8fafc;
+}
+
+/* ===== HEADER ===== */
+.report-header {
+    text-align: left; 
+    margin-bottom: 25px;
+}
+
+.report-header h2 {
+    font-weight: 800;
+    font-size: 26px;
+    color: #0f172a;
+    margin-bottom: 5px;
+}
+
+.report-header p {
+    color: #64748b;
+    font-size: 14px;
+}
+
+/* ===== FILTER CARD ===== */
+.filter-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 20px;
+    border: none;
+}
+
+.filter-row {
+    display: flex;
+    gap: 15px;
+    align-items: flex-end;
+    flex-wrap: nowrap;
+}
+
+.filter-item {
+    flex: 1;
+}
+
+.btn-item {
+    flex: 0.5;
+}
+
+.filter-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.custom-select {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    padding: 10px 12px;
+    font-weight: 600;
+    font-size: 14px;
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+.custom-select:focus {
+    border-color: #cbd5e1;
+    box-shadow: none;
+    background: #fff;
+}
+
+.btn-search {
+    background: #f8fafc;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+    padding: 10px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+/* ===== TABLE WRAPPER ===== */
+.report-table-wrapper {
+    background: transparent;
+}
+
+/* ===== DESKTOP TABLE ===== */
+.modern-table {
+    width: 100%;
+    background: white;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+}
+
+.modern-table thead {
+    background: #f8fafc;
+}
+
+.modern-table th {
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    padding: 15px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modern-table td {
+    padding: 15px;
+    font-size: 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #334155;
+}
+
+/* ===== DYNAMIC TEXT COLORS ===== */
+.badge-in { color: #10b981; font-weight: 600; }     /* Green */
+.badge-out { color: #ef4444; font-weight: 600; }    /* Red */
+.badge-pending { color: #f59e0b; font-weight: 600; } /* Orange */
+.badge-mode { color: #0ea5e9; font-weight: 600; }   /* Blue (Office) */
+
+.text-hours { color: #475569; font-weight: 600; }
+.text-absent { color: #ef4444; font-weight: 700; }  /* Red Bold (Absent) */
+.text-weeklyoff { color: #8b5cf6; font-weight: 600; } /* Purple (Sunday) */
+.text-blank { color: #cbd5e1; font-weight: 400; }   /* Light Gray (Future) */
+
+/* ===== EMPTY STATE ===== */
+.empty-state {
+    text-align: center;
+    padding: 50px 20px;
+    background: white;
+    border-radius: 16px;
+}
+
+/* =========================================
+   📱 MOBILE RESPONSIVE
+========================================= */
+@@media (max-width: 768px) {
+    
+    .report-wrapper {
+        padding: 15px 10px; 
+    }
+
+    .filter-row {
+        flex-wrap: wrap;
+    }
+    
+    .filter-item {
+        flex: 1 1 45%; 
+    }
+
+    .btn-item {
+        flex: 1 1 100%; 
+        margin-top: 5px;
+    }
+
+    .custom-select {
+        padding: 8px 10px;
+        font-size: 13px;
+    }
+
+    .report-table-wrapper {
+        background: transparent;
+        box-shadow: none;
+    }
+
+    .modern-table thead {
+        display: none;
+    }
+
+    .modern-table,
+    .modern-table tbody,
+    .modern-table tr,
+    .modern-table td {
+        display: block;
+        width: 100%;
+        box-sizing: border-box; 
+    }
+
+    .modern-table tr {
+        margin-bottom: 15px;
+        background: white;
+        padding: 15px;
+        border-radius: 16px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+        border: none;
+    }
+
+    .modern-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border: none;
+        font-size: 13px;
+        gap: 15px;
+    }
+
+    .modern-table td::before {
+        content: attr(data-label);
+        font-weight: 500;
+        color: #64748b;
+        min-width: 80px;
+    }
+
+    .text-value {
+        text-align: right;
+        word-wrap: break-word;
+        white-space: normal;
+        max-width: 65%; 
+    }
+}
+</style>
+
+@code {
+    private int SelectedMonth = DateTime.Now.Month;
+    private int SelectedYear = DateTime.Now.Year;
+    private bool IsLoading = false;
+    private string ErrorMessage = "";
+    private string EmployeeName = string.Empty;
+
+    private List<AttendanceRecordViewModel> Records;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReport();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                EmployeeName = await JS.InvokeAsync<string>("localStorage.getItem", "empName");
+                if (string.IsNullOrEmpty(EmployeeName))
+                {
+                    NavManager.NavigateTo("/", true);
+                }
+                StateHasChanged();               
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private async Task LoadReport()
+    {
+        IsLoading = true;
+        ErrorMessage = "";
+
+        try
+        {
+            var empIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+            int empId = string.IsNullOrEmpty(empIdStr) ? 1 : int.Parse(empIdStr);
+
+            var request = new ReportFilterRequest
+            {
+                EmployeeId = empId,
+                Month = SelectedMonth,
+                Year = SelectedYear
+            };
+
+            var response = await Http.PostAsJsonAsync("api/attendance/report", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                // 1. API मधून आलेला डेटा
+                var apiRecords = await response.Content.ReadFromJsonAsync<List<AttendanceRecordViewModel>>();
+                
+                // 2. पूर्ण महिन्याचा डेटा बनवणे
+                var fullMonthRecords = new List<AttendanceRecordViewModel>();
+                int daysInMonth = DateTime.DaysInMonth(SelectedYear, SelectedMonth);
+                DateTime today = DateTime.Now.Date;
+
+                // 31 तारखेपासून 1 तारखेपर्यंत लूप फिरवणे (म्हणजे नवीन तारीख वरती दिसेल)
+                for (int day = daysInMonth; day >= 1; day--)
+                {
+                    DateTime loopDate = new DateTime(SelectedYear, SelectedMonth, day);
+                    string formattedDate = loopDate.ToString("dd MMM yyyy");
+
+                    // या तारखेचा रेकॉर्ड API मध्ये आहे का ते चेक करणे
+                    var existingRecord = apiRecords?.FirstOrDefault(x => x.Date == formattedDate);
+
+                    if (existingRecord != null)
+                    {
+                        // जर Employee Present असेल तर तो डेटा टाका
+                        fullMonthRecords.Add(existingRecord);
+                    }
+                    else
+                    {
+                        // जर Data नसेल, तर एक रिकामी Row तयार करा
+                        var emptyRecord = new AttendanceRecordViewModel
+                        {
+                            Date = formattedDate,
+                            DayName = loopDate.ToString("dddd"),
+                            PunchIn = "-",
+                            PunchOut = "-",
+                            TotalHours = "-"
+                        };
+
+                        if (loopDate > today)
+                        {
+                            // भविष्यकाळ (Future Date)
+                            emptyRecord.WorkMode = "-"; 
+                        }
+                        else if (loopDate.DayOfWeek == DayOfWeek.Sunday)
+                        {
+                            // रविवार
+                            emptyRecord.WorkMode = "Weekly Off"; 
+                        }
+                        else
+                        {
+                            // भूतकाळ / आज (ज्या दिवशी Punch नाही केले)
+                            emptyRecord.WorkMode = "Absent"; 
+                        }
+
+                        fullMonthRecords.Add(emptyRecord);
+                    }
+                }
+
+                Records = fullMonthRecords;
+            }
+            else
+            {
+                ErrorMessage = "Failed to load report. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Server error: " + ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    // Dynamic Classes for CSS styling
+    private string GetPunchOutClass(string punchOut)
+    {
+        if (punchOut == "-" || string.IsNullOrEmpty(punchOut)) return "text-blank";
+        if (punchOut == "Pending") return "badge-pending";
+        return "badge-out";
+    }
+
+    private string GetModeClass(string mode)
+    {
+        if (mode == "Absent") return "text-absent";
+        if (mode == "Weekly Off") return "text-weeklyoff";
+        if (mode == "-") return "text-blank";
+        return "badge-mode"; // Normal Office/Home mode
+    }
+
+    private void GoBack()
+    {
+        NavManager.NavigateTo("/attendance");
+    }
+  private string GetAttendanceStatus(string punchIn, string mode)
+{
+    // Weekly Off / Absent / Future
+    if (mode == "Weekly Off" || mode == "Absent" || mode == "-")
+        return "-";
+
+    if (string.IsNullOrWhiteSpace(punchIn) || punchIn == "-")
+        return "-";
+
+    // Parse DateTime
+    if (DateTime.TryParse(punchIn, out var dt))
+    {
+        TimeSpan inTime = dt.TimeOfDay;
+
+        // 9:45 AM Limit
+        TimeSpan lateLimit = new TimeSpan(9, 45, 0);
+
+        return inTime > lateLimit ? "Late Mark" : "On Time";
+    }
+
+    return "-";
+}
+
+private string GetAttendanceClass(string punchIn)
+{
+    if (string.IsNullOrWhiteSpace(punchIn) || punchIn == "-")
+        return "text-blank";
+
+    if (DateTime.TryParse(punchIn, out var dt))
+    {
+        TimeSpan inTime = dt.TimeOfDay;
+
+        TimeSpan lateLimit = new TimeSpan(9, 45, 0);
+
+        return inTime > lateLimit ? "badge-late" : "badge-ontime";
+    }
+
+    return "text-blank";
+}
+}

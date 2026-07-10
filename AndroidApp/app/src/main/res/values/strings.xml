@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ONE HR</string>
+    <string name="notification_channel_name">WFH GPS Tracking</string>
+    <string name="notification_channel_desc">Shows while WFH GPS location tracking is active</string>
+    <string name="notification_title">ONE HR — WFH Tracking Active</string>
+    <string name="notification_text">Your location is being monitored. Keep this running.</string>
+    <string name="permission_location_rationale">Location permission is required for WFH attendance tracking. Please select "Allow all the time" to enable background tracking.</string>
+</resources>

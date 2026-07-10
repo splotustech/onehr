@@ -1,0 +1,480 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>ONE HR</title>
+    <base href="/" />
+
+    <!-- âœ… Mobile -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <!-- CSS -->
+    <link href="css/app.css" rel="stylesheet" />
+
+    <!-- âœ… Manifest -->
+    <link rel="manifest" href="manifest.json" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.1/font/css/open-iconic-bootstrap.min.css" rel="stylesheet" />
+
+    <!-- Theme -->
+    <meta name="theme-color" content="#0ea5e9" />
+
+    <!-- ✅ Apple / iOS PWA Tags — Required for "Add to Home Screen" on iPhone/iPad -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ONE HR" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="icon-192.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="icon-192.png" />
+</head>
+
+<body>
+
+    <!-- 1. Loader à¤¸à¤¾à¤ à¥€ CSS -->
+    <style>
+        /* à¤ªà¥‚à¤°à¥à¤£ à¤¸à¥à¤•à¥à¤°à¥€à¤¨ à¤•à¤µà¥à¤¹à¤° à¤•à¤°à¤£à¥à¤¯à¤¾à¤¸à¤¾à¤ à¥€ à¤†à¤£à¤¿ à¤®à¤§à¥à¤¯à¤­à¤¾à¤—à¥€ à¤†à¤£à¤£à¥à¤¯à¤¾à¤¸à¤¾à¤ à¥€ */
+        .initial-loader-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%); /* à¤¤à¥à¤®à¤šà¥à¤¯à¤¾ à¥²à¤ªà¤šà¤¾ à¤¬à¥…à¤•à¤—à¥à¤°à¤¾à¤Šà¤‚à¤¡ à¤•à¤²à¤° */
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+        }
+
+        /* 3 Dots Container */
+        .bouncing-dots {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+            /* Dots Styling and Animation */
+            .bouncing-dots div {
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: #3b82f6; /* Blue Color */
+                animation: bounceLoader 0.6s infinite alternate;
+            }
+
+                .bouncing-dots div:nth-child(2) {
+                    background: #8b5cf6; /* Purple Color */
+                    animation-delay: 0.2s;
+                }
+
+                .bouncing-dots div:nth-child(3) {
+                    background: #20c997; /* Green Color */
+                    animation-delay: 0.4s;
+                }
+
+        @@keyframes bounceLoader {
+            to {
+                transform: translateY(-18px);
+            }
+        }
+
+        /* Loading Text Animation */
+        .loading-text {
+            color: #334155;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            animation: pulseText 1.5s infinite;
+        }
+
+        @@keyframes pulseText {
+            0%, 100% {
+                opacity: 0.4;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+    </style>
+
+    <!-- 2. à¤¤à¥à¤®à¤šà¤¾ App Div (à¤œà¥à¤¯à¤¾à¤®à¤§à¥à¤¯à¥‡ Loader à¤†à¤¹à¥‡) -->
+    <div id="app">
+        <div class="initial-loader-wrapper">
+            <div class="bouncing-dots">
+                <div></div>
+                <div></div>
+                <div></div>
+            </div>
+            <div class="loading-text">Loading ONE HR...</div>
+        </div>
+    </div>
+
+
+    <!-- Error UI -->
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">ðŸ—™</a>
+    </div>
+    <!-- ============================= -->
+    <!-- ðŸ”¥ INSTALL BANNER -->
+    <!-- ============================= -->
+    <div id="install-banner"
+         style="display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+                background:#fff; padding:20px; border-radius:20px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.2);
+                z-index:9999; text-align:center; width:90%; max-width:350px;">
+
+        <div style="font-weight:700; font-size:18px; margin-bottom:5px;">
+            Install ONE HR
+        </div>
+
+        <div id="install-text" style="font-size:13px; margin-bottom:15px; line-height:1.6;">
+            Add app to home screen for better experience
+        </div>
+
+        <button id="install-btn"
+                style="background:#0ea5e9; color:white; border:none;
+                       padding:12px; border-radius:10px;
+                       width:100%; font-weight:600; cursor:pointer;">
+            Install
+        </button>
+
+        <button id="close-btn"
+                style="background:none; border:none;
+                       margin-top:10px; font-size:12px; cursor:pointer;">
+            Not Now
+        </button>
+    </div>
+
+    <!-- ============================= -->
+    <!-- ðŸ”¥ PWA INSTALL SCRIPT -->
+    <!-- ============================= -->
+    <script>
+        (function () {
+            var deferredPrompt = null;
+            var banner      = document.getElementById('install-banner');
+            var installBtn  = document.getElementById('install-btn');
+            var closeBtn    = document.getElementById('close-btn');
+            var installText = document.getElementById('install-text');
+            if (!banner) return;
+            var ua = navigator.userAgent.toLowerCase();
+            var isIosDev = /iphone|ipad|ipod/.test(ua);
+            var isSafariBrowser = /safari/.test(ua) && !/chrome|crios|fxios/.test(ua);
+            var isStandaloneMode = (window.navigator.standalone === true) || window.matchMedia('(display-mode: standalone)').matches;
+            if (isStandaloneMode) return;
+            if (localStorage.getItem('pwaClosed') === 'true') return;
+            if (isIosDev && isSafariBrowser) {
+                installText.innerHTML = '<strong>To install ONE HR on iPhone / iPad:</strong><br>' +
+                    '1. Tap the <strong>Share</strong> button at the bottom of Safari<br>' +
+                    '2. Scroll down and tap <strong>&#34;Add to Home Screen&#34;</strong><br>' +
+                    '3. Tap <strong>&#34;Add&#34;</strong>';
+                installBtn.style.display = 'none';
+                banner.style.display = 'block';
+                closeBtn.addEventListener('click', function () {
+                    banner.style.display = 'none';
+                    localStorage.setItem('pwaClosed', 'true');
+                });
+                return;
+            }
+            window.addEventListener('beforeinstallprompt', function (e) {
+                e.preventDefault();
+                deferredPrompt = e;
+                banner.style.display = 'block';
+            });
+            if (installBtn) {
+                installBtn.addEventListener('click', async function () {
+                    if (!deferredPrompt) return;
+                    deferredPrompt.prompt();
+                    await deferredPrompt.userChoice;
+                    deferredPrompt = null;
+                    banner.style.display = 'none';
+                });
+            }
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function () {
+                    banner.style.display = 'none';
+                    localStorage.setItem('pwaClosed', 'true');
+                });
+            }
+            window.addEventListener('appinstalled', function () {
+                banner.style.display = 'none';
+                deferredPrompt = null;
+            });
+        })();
+    </script>
+
+    <!-- ============================= -->
+    <!-- GEOLOCATION -->
+    <!-- ============================= -->
+    <script>
+        // Call the function
+        window.getGeoLocation = () => {
+            return new Promise((resolve, reject) => {
+                // Check if browser supports Geolocation
+                if (!navigator.geolocation) {
+                    reject("Geolocation is not supported by your browser");
+                    return;
+                }
+
+                // 1. THESE ARE THE KEY SETTINGS FROM YOUR HTML CODE
+                const options = {
+                    enableHighAccuracy: true, // Forces GPS usage
+                    timeout: 10000,           // Waits up to 10 seconds
+                    maximumAge: 0             // Forces a fresh reading (no cache)
+                };
+
+                // 2. Call getCurrentPosition with the options
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        // Success: Resolve with coordinates and accuracy
+                        resolve({
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy
+                        });
+                    },
+                    (error) => {
+                        // Error: Reject with message
+                        reject(error.message);
+                    },
+                    options // <--- IMPORTANT: This must be passed here
+                );
+            });
+        };
+    </script>
+
+
+    <!-- Blazor -->
+    <script src="_framework/blazor.webassembly.js"></script>
+
+    <!-- ============================= -->
+    <!-- ðŸ”¥ CORRECT SERVICE WORKER -->
+    <!-- ============================= -->
+    <script src="push-notification.js"></script>
+    <script src="wfhTracking.js"></script>
+    <!--<script>
+        let newWorker;
+        let refreshing = false;
+
+        if ('serviceWorker' in navigator) {
+
+            navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' })
+                .then(reg => {
+
+                    // ðŸ”¥ CHECK UPDATE ON LOAD
+                    reg.update();
+
+                    // ðŸ”¥ CHECK UPDATE EVERY 10 SEC
+                    setInterval(() => {
+                        console.log("ðŸ”„ Checking for update...");
+                        reg.update();
+                    }, 10000);
+
+                    // ðŸ”¥ Detect new update
+                    reg.addEventListener('updatefound', () => {
+
+                        newWorker = reg.installing;
+
+                        newWorker.addEventListener('statechange', () => {
+
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+
+                                console.log("âœ… New update available");
+
+                                document.getElementById('update-banner').style.display = 'block';
+                            }
+                        });
+                    });
+                })
+                .catch(err => console.error("SW Error:", err));
+
+            const updateBtn = document.getElementById('update-btn');
+
+            updateBtn.addEventListener('click', () => {
+
+                console.log("ðŸ”¥ Update button clicked");
+
+                updateBtn.innerText = "Updating...";
+                updateBtn.disabled = true;
+
+                document.getElementById('update-banner').style.display = 'none';
+
+                if (!newWorker) {
+                    console.log("âš ï¸ No new worker, force reload");
+                    window.location.reload(true);
+                    return;
+                }
+
+                // ðŸ‘‰ Activate new version
+                newWorker.postMessage({ action: 'skipWaiting' });
+            });
+
+            // ðŸ”¥ Reload when new SW activated
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+
+                if (refreshing) return;
+                refreshing = true;
+
+                console.log("â™»ï¸ Reloading with new version");
+
+                window.location.reload();
+            });
+
+            // ðŸ”¥ EXTRA: Force update on page load
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.getRegistration().then(reg => {
+                    if (reg) {
+                        reg.update();
+                    }
+                });
+            });
+        }
+    </script>-->
+    <script>
+        // Register service worker for PWA caching only.
+        // Update notifications are handled exclusively by the Blazor MainLayout banner.
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' })
+                .catch(err => console.error("SW registration error:", err));
+        }
+    </script>
+    <script>
+        window.downloadFile = function (fileName, contentType, base64) {
+            // Android WebView: delegate to native bridge which saves to Downloads folder
+            if (window.AndroidBridge && typeof window.AndroidBridge.downloadFile === 'function') {
+                window.AndroidBridge.downloadFile(fileName, contentType, base64);
+                return;
+            }
+            // Web browser: use Blob URL (works in Chrome/Edge/Firefox, avoids data: URI limits)
+            try {
+                const byteChars = atob(base64);
+                const byteArr = new Uint8Array(byteChars.length);
+                for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+                const blob = new Blob([byteArr], { type: contentType });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+            } catch (e) {
+                console.error('downloadFile error:', e);
+            }
+        }
+    </script>
+    <script>
+        window.startVideo = async () => {
+            try {
+                const video = document.getElementById('videoFeed');
+                if (!video) {
+                    console.error("à¤µà¥à¤¹à¤¿à¤¡à¤¿à¤“ à¤Ÿà¥…à¤— à¤¸à¤¾à¤ªà¤¡à¤²à¤¾ à¤¨à¤¾à¤¹à¥€.");
+                    return;
+                }
+
+                // 1. à¤¸à¤¿à¤•à¥à¤¯à¥à¤°à¤¿à¤Ÿà¥€ à¤šà¥‡à¤• (HTTP vs HTTPS)
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    alert("à¤¤à¥à¤®à¤šà¤¾ à¤¬à¥à¤°à¤¾à¤‰à¤à¤° à¤•à¥…à¤®à¥‡à¤°à¤¾à¤²à¤¾ à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ à¤•à¤°à¤¤ à¤¨à¤¾à¤¹à¥€. à¤•à¥ƒà¤ªà¤¯à¤¾ à¤–à¤¾à¤¤à¥à¤°à¥€ à¤•à¤°à¤¾ à¤•à¥€ à¤¤à¥à¤®à¥à¤¹à¥€ 'https://' à¤•à¤¿à¤‚à¤µà¤¾ 'localhost' à¤µà¤¾à¤ªà¤°à¤¤ à¤†à¤¹à¤¾à¤¤.");
+                    return;
+                }
+
+                // 2. à¤•à¥…à¤®à¥‡à¤°à¤¾à¤šà¥€ Permission à¤®à¤¾à¤—à¤¾ (à¤¯à¥‡à¤¥à¥‡ à¤¬à¥à¤°à¤¾à¤‰à¤à¤° à¤¯à¥à¤œà¤°à¤²à¤¾ Allow/Block à¤µà¤¿à¤šà¤¾à¤°à¥‡à¤²)
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "user" } // à¤«à¥à¤°à¤‚à¤Ÿ à¤•à¥…à¤®à¥‡à¤°à¤¾ (à¤¸à¥‡à¤²à¥à¤«à¥€) à¤¸à¥à¤°à¥ à¤•à¤°à¤£à¥à¤¯à¤¾à¤¸à¤¾à¤ à¥€
+                });
+
+                // 3. à¤µà¥à¤¹à¤¿à¤¡à¤¿à¤“ à¤Ÿà¥…à¤—à¤²à¤¾ à¤•à¥…à¤®à¥‡à¤°à¤¾ à¤«à¥€à¤¡ à¤œà¥‹à¤¡à¤¾
+                video.srcObject = stream;
+
+                // 4. à¤¬à¥à¤²à¥…à¤• à¤¸à¥à¤•à¥à¤°à¥€à¤¨ à¤Ÿà¤¾à¤³à¤£à¥à¤¯à¤¾à¤¸à¤¾à¤ à¥€ à¤®à¥…à¤¨à¥à¤¯à¥à¤…à¤²à¥€ à¤ªà¥à¤²à¥‡ à¤•à¤°à¤¾
+                await video.play();
+
+            } catch (err) {
+                console.error("Camera Error: ", err);
+                if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+                    // Camera is in use by another app — stop existing stream and retry once
+                    var vid2 = document.getElementById('videoFeed');
+                    if (vid2 && vid2.srcObject) { vid2.srcObject.getTracks().forEach(function(t){t.stop();}); vid2.srcObject = null; }
+                    await new Promise(function(r){setTimeout(r,1200);});
+                    try {
+                        var retryStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                        vid2.srcObject = retryStream;
+                        await vid2.play();
+                        return;
+                    } catch (_) {
+                        alert("Camera is being used by another application. Please close other camera apps and try again.");
+                        return;
+                    }
+                } else if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                    alert("à¤•à¥…à¤®à¥‡à¤°à¤¾à¤šà¥€ à¤ªà¤°à¤µà¤¾à¤¨à¤—à¥€ (Permission) à¤¨à¤¾à¤•à¤¾à¤°à¤²à¥€ à¤—à¥‡à¤²à¥€ à¤†à¤¹à¥‡! à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¬à¥à¤°à¤¾à¤‰à¤à¤°à¤šà¥à¤¯à¤¾ URL à¤¬à¤¾à¤° à¤®à¤§à¥€à¤² ðŸ”’ (Lock) à¤†à¤¯à¤•à¥‰à¤¨à¤µà¤° à¤•à¥à¤²à¤¿à¤• à¤•à¤°à¤¾ à¤†à¤£à¤¿ à¤•à¥…à¤®à¥‡à¤°à¤¾ 'Allow' à¤•à¤°à¤¾.");
+                } else {
+                    alert("à¤•à¥…à¤®à¥‡à¤°à¤¾ à¤šà¤¾à¤²à¥‚ à¤¹à¥‹à¤Š à¤¶à¤•à¤²à¤¾ à¤¨à¤¾à¤¹à¥€. à¤¦à¥à¤¸à¤°à¤¾ à¤•à¥à¤ à¤²à¤¾à¤¤à¤°à¥€ à¥²à¤ª à¤•à¥…à¤®à¥‡à¤°à¤¾ à¤µà¤¾à¤ªà¤°à¤¤ à¤¨à¤¾à¤¹à¥€à¤¯à¥‡ à¤¨à¤¾ à¤¤à¥‡ à¤¤à¤ªà¤¾à¤¸à¤¾.");
+                }
+            }
+        };
+
+        window.capturePhoto = () => {
+            const video = document.getElementById('videoFeed');
+            const canvas = document.getElementById('canvas');
+
+            if (!video || !video.srcObject) {
+                alert("à¤•à¥…à¤®à¥‡à¤°à¤¾ à¤šà¤¾à¤²à¥‚ à¤à¤¾à¤²à¥‡à¤²à¤¾ à¤¨à¤¾à¤¹à¥€. à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¥à¥‹à¤¡à¤¾ à¤µà¥‡à¤³ à¤µà¤¾à¤Ÿ à¤ªà¤¾à¤¹à¤¾ à¤•à¤¿à¤‚à¤µà¤¾ à¤ªà¥‡à¤œ à¤°à¤¿à¤«à¥à¤°à¥‡à¤¶ à¤•à¤°à¤¾.");
+                return null;
+            }
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // à¤«à¥‹à¤Ÿà¥‹ à¤¬à¥‡à¤¸64 à¤®à¤§à¥à¤¯à¥‡ à¤•à¤¨à¥à¤µà¥à¤¹à¤°à¥à¤Ÿ à¤•à¤°à¥‚à¤¨ à¤°à¤¿à¤Ÿà¤°à¥à¤¨ à¤•à¤°à¤¾
+            return canvas.toDataURL('image/jpeg', 0.8);
+        };
+    </script>
+    <script>
+        window.stopVideo = () => {
+            const video = document.getElementById('videoFeed');
+
+            if (video && video.srcObject) {
+                const stream = video.srcObject;
+
+                // Stop all tracks (camera OFF)
+                stream.getTracks().forEach(track => track.stop());
+
+                // Remove stream reference
+                video.srcObject = null;
+            }
+        };
+    </script>
+    <script>
+        window.forceAppUpdate = async () => {
+
+            console.log("ðŸ”¥ Manual refresh triggered");
+
+            // ðŸ”¥ Clear all caches
+            if ('caches' in window) {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(key => caches.delete(key)));
+            }
+
+            // ðŸ”¥ Unregister service worker
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (let reg of registrations) {
+                    await reg.unregister();
+                }
+            }
+
+            // ðŸ”¥ Hard reload (no cache)
+            window.location.reload(true);
+        };
+    </script>
+
+</body>
+</html>

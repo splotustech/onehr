@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37012.4
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SMART HRMS SYSTEM.Server", "Server\SMART HRMS SYSTEM.Server.csproj", "{BFA62640-19C8-447F-97A8-D42135704A06}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SMART HRMS SYSTEM.Client", "Client\SMART HRMS SYSTEM.Client.csproj", "{28406BCE-09CD-4968-A342-A2C83AD112EC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SMART HRMS SYSTEM.Shared", "Shared\SMART HRMS SYSTEM.Shared.csproj", "{10E43CC2-1F24-4909-8462-1DDB65051DD6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BFA62640-19C8-447F-97A8-D42135704A06}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BFA62640-19C8-447F-97A8-D42135704A06}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BFA62640-19C8-447F-97A8-D42135704A06}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BFA62640-19C8-447F-97A8-D42135704A06}.Release|Any CPU.Build.0 = Release|Any CPU
+		{28406BCE-09CD-4968-A342-A2C83AD112EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{28406BCE-09CD-4968-A342-A2C83AD112EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{28406BCE-09CD-4968-A342-A2C83AD112EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{28406BCE-09CD-4968-A342-A2C83AD112EC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{10E43CC2-1F24-4909-8462-1DDB65051DD6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{10E43CC2-1F24-4909-8462-1DDB65051DD6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{10E43CC2-1F24-4909-8462-1DDB65051DD6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{10E43CC2-1F24-4909-8462-1DDB65051DD6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8FCB7BE8-A64B-4E22-A692-B163C045B422}
+	EndGlobalSection
+EndGlobal

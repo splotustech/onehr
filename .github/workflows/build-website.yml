@@ -1,0 +1,40 @@
+name: Build Website
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-website:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore "Server/SMART HRMS SYSTEM.Server.csproj"
+
+      - name: Publish Website
+        run: |
+          dotnet publish "Server/SMART HRMS SYSTEM.Server.csproj" \
+            -c Release \
+            -o ./website-output
+
+      - name: Zip Website
+        run: |
+          cd website-output
+          zip -r ../OneHR-Website-Deploy.zip .
+
+      - name: Upload Website
+        uses: actions/upload-artifact@v4
+        with:
+          name: OneHR-Website-v${{ github.run_number }}
+          path: OneHR-Website-Deploy.zip
+          retention-days: 30

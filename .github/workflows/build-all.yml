@@ -1,0 +1,97 @@
+name: Build Android APK + Website
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+
+  # ── Android APK ────────────────────────────────────────────────────────────
+  build-android:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install MAUI Android workload
+        run: dotnet workload install android maui-android
+
+      - name: Build Android APK
+        run: |
+          dotnet publish MauiApp/MauiApp.csproj `
+            -f net9.0-android `
+            -c Release `
+            -o ./android-output
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpOneHR-Android-${{ github.run_number }}
+          path: |
+            android-output/*.apk
+            MauiApp/bin/Release/net9.0-android/*.apk
+          retention-days: 30
+
+  # ── iOS IPA ────────────────────────────────────────────────────────────────
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install MAUI iOS workload
+        run: dotnet workload install ios maui-ios
+
+      - name: Build iOS IPA
+        run: |
+          dotnet publish MauiApp/MauiApp.csproj \
+            -f net9.0-ios \
+            -c Release \
+            -r ios-arm64 \
+            -p:BuildIpa=true \
+            -p:EnableCodeSigning=false \
+            -p:CodesignKey="" \
+            -p:CodesignProvision="" \
+            -o ./ios-output
+
+      - name: Upload iOS IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpOneHR-iOS-${{ github.run_number }}
+          path: |
+            ios-output/*.ipa
+            MauiApp/bin/Release/net9.0-ios/ios-arm64/**/*.ipa
+          retention-days: 30
+
+  # ── Website ────────────────────────────────────────────────────────────────
+  build-website:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build & Publish Website
+        run: |
+          dotnet publish "Server/SMART HRMS SYSTEM.Server.csproj" `
+            -c Release `
+            -o ./website-output
+
+      - name: Upload Website
+        uses: actions/upload-artifact@v4
+        with:
+          name: OneHR-Website-${{ github.run_number }}
+          path: website-output/
+          retention-days: 30

@@ -1,0 +1,2938 @@
+﻿@page "/attendance"
+@inject HttpClient Http
+@inject IJSRuntime JS
+@using SMART_HRMS_SYSTEM.Shared.Models
+@using SMART_HRMS_SYSTEM.Shared.ViewModel
+
+@inject NavigationManager NavManager
+@implements IDisposable
+
+<div class="attendance-wrapper">
+    <div class="attendance-card">
+
+        <!-- Top Badges (Employee Name & Date) -->
+        <div class="top-badges">
+            <div class="badge-pill">
+                <i class="oi oi-person badge-icon"></i> Welcome @(string.IsNullOrEmpty(EmployeeName) ? "User" : EmployeeName)
+            </div>
+            <div class="badge-pill">
+                <i class="oi oi-calendar badge-icon"></i> @DateTime.Now.ToString("dd MMM yyyy, dddd")
+            </div>
+        </div>
+
+        <!-- Modern Header -->
+        <div class="card-header-modern">
+            <h2>Daily Attendance</h2>
+
+            @if (AllowedMode == "Work From Home")
+            {
+                <!-- WFH असेल तर हा मेसेज दिसेल -->
+                <p class="subtitle">Work From Home active. Secure your attendance with a live selfie.</p>
+            }
+            else
+            {
+                <!-- Office असेल तर तुमचा जुना मेसेज दिसेल -->
+                <p class="subtitle">Mark your attendance within Office Location Only.</p>
+            }
+        </div>
+
+        <!-- Alert Message -->
+        @if (!string.IsNullOrEmpty(Message))
+        {
+            <div class="custom-alert @(AlertClass)">
+                @if (AlertClass == "alert-danger")
+                {
+                    <i class="oi oi-warning pe-2"></i>
+                }
+                else
+                {
+                    <i class="oi oi-circle-check pe-2"></i>
+                }
+                <span>@Message</span>
+            </div>
+        }
+
+        @if (IsLoading)
+        {
+            if (IsPunchedIn)
+            {
+                <div class="loading-state">
+                    @if (HasPunchedIn)
+                    {
+                        <div class="pulse-spinner punch-out-spinner"></div>
+                        <h6 class="fw-bold text-danger mt-3">Punching Out...</h6>
+                        <p class="text-muted small">Verifying location and saving your working hours.</p>
+                    }
+                    else
+                    {
+                        <div class="pulse-spinner punch-in-spinner"></div>
+                        <h6 class="fw-bold text-success mt-3">Punching In...</h6>
+                        <p class="text-muted small">Please wait, marking your attendance securely.</p>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="loading-state">
+                    <div class="pulse-spinner"></div>
+                    <p>Fetching your accurate GPS location...</p>
+                </div>
+            }
+        }
+        else
+        {
+
+            @if (!string.IsNullOrEmpty(AllowedMode))
+            {
+                <div class="mode-indicator-container">
+                    <div class="mode-tag @(AllowedMode == "Work From Home" ? "wfh-active" : "office-active")">
+                        <i class="oi @(AllowedMode == "Work From Home" ? "oi-laptop" : "oi-home")"></i>
+                        Work Mode: @AllowedMode
+                    </div>
+                </div>
+            }
+            <!-- Status, Location & Working Hours Grid -->
+            <div class="status-grid">
+                <div class="status-box">
+                    <span class="status-label">Duty Status</span>
+                    <span class="status-value @(HasPunchedIn ? "text-success" : "text-warning")">
+                        <i class="oi @(HasPunchedIn ? "oi-check" : "oi-clock")"></i>
+                        @(IsAttendanceCompleted ? "Completed" : HasPunchedIn ? "Checked In" : "Not Checked In")
+                    </span>
+                </div>
+
+                <div class="status-box">
+                    <span class="status-label">Location Status</span>
+                    @if (AllowedMode == "Work From Home")
+                    {
+                        <!-- WFH असेल तर हे दिसेल -->
+                        <span class="status-value" style="color: #d97706;">
+                            <!-- Orange color to match WFH theme -->
+                            <i class="oi oi-laptop"></i>
+                            WFH (Remote)
+                        </span>
+                    }
+                    else
+                    {
+                        <!-- Office असेल तर हे दिसेल (तुमचा जुना कोड) -->
+                        <span class="status-value @(IsWithinRange ? "text-success" : "text-danger")">
+                            <i class="oi oi-map-marker"></i>
+                            @(IsWithinRange ? $"In Range ({Math.Round(Distance)}m)" : "Out of Range")
+                        </span>
+                    }
+                </div>
+
+                <div class="status-box">
+                    <span class="status-label">Working Hours</span>
+                    <span class="status-value text-info" style="font-family: monospace; font-size: 16px;">
+                        <i class="oi oi-timer"></i>
+                        @WorkingHours
+                    </span>
+                </div>
+            </div>
+
+            <!-- Big Circular Punch Button -->
+            <div class="punch-section">
+                @if (!string.IsNullOrEmpty(AllowedMode))
+                {
+                    @if (NeedsSelfie && !HasPunchedIn && !IsAttendanceCompleted)
+                    {
+                        <!-- 🤳 WFH Selfie Section -->
+                        <div class="camera-container">
+                            <div class="camera-preview-box">
+                                <!-- playsinline जोडले आहे जेणेकरून मोबाईलवर व्हिडीओ फुल-स्क्रीन होणार नाही -->
+                                <video id="videoFeed" autoplay playsinline muted></video>
+                                <canvas id="canvas" style="display:none;"></canvas>
+
+                                <div class="camera-overlay">
+                                    <i class="oi oi-target"></i> Position your face to punch in
+                                </div>
+                            </div>
+
+                            <button class="btn-take-photo" @onclick="CaptureAndPunch">
+                                <i class="oi oi-camera-slr"></i> Take Photo & Punch In
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                       @*  <button class="punch-btn @(IsAttendanceCompleted ? "disabled-btn" : (HasPunchedIn ? "btn-punch-out" : "btn-punch-in"))"
+                        disabled="@(!IsWithinRange || IsAttendanceCompleted)"
+                        @onclick="HandlePunch">
+                            <div class="btn-content">
+                                <i class="oi @(IsAttendanceCompleted ? "oi-check" : IconClass) punch-icon"></i>
+                                <span class="punch-text">
+                                    @(IsAttendanceCompleted ? "COMPLETED" : ButtonText)
+                                </span>
+                            </div>
+                        </button> *@
+                        <button class="punch-btn @(IsAttendanceCompleted ? "disabled-btn" : (HasPunchedIn ? "btn-punch-out" : "btn-punch-in"))"
+                                disabled="@((AllowedMode == "Office" && !IsWithinRange) || IsAttendanceCompleted)"
+                                @onclick="HandlePunch">
+                            <div class="btn-content">
+                                <i class="oi @(IsAttendanceCompleted ? "oi-check" : IconClass) punch-icon"></i>
+                                <span class="punch-text">
+                                    @(IsAttendanceCompleted ? "COMPLETED" : ButtonText)
+                                </span>
+                            </div>
+                        </button>
+                    }
+                }
+                else
+                {
+                    <button class="punch-btn @(!IsWithinRange ? "disabled-btn" : (HasPunchedIn ? "btn-punch-out" : "btn-punch-in"))"
+                            disabled="@(!IsWithinRange || IsAttendanceCompleted)"
+                            @onclick="HandlePunch">
+                        <div class="btn-content">
+                            <i class="oi @(IsAttendanceCompleted ? "oi-check" : IconClass) punch-icon"></i>
+                            <span class="punch-text">
+                                @(IsAttendanceCompleted ? "COMPLETED" : ButtonText)
+                            </span>
+                        </div>
+                    </button>
+                }
+                @if (IsAttendanceCompleted)
+                {
+                    <p class="range-warning text-success mt-3">
+                        <i class="oi oi-check"></i> Your attendance is already completed for today.
+                    </p>
+                }
+                else
+                {
+                    @if (AllowedMode == "Work From Home")
+                    {
+                        @if (!HasPunchedIn)
+                        {
+                            <p class="range-warning text-success mt-3">
+                                <i class="oi oi-camera-slr"></i> WFH Active. Please capture a selfie to punch in/out.
+                            </p>
+                        }
+                    }
+                    else
+                    {
+                        <!-- Office मोड चालू असेल तेव्हा -->
+                        @if (!IsWithinRange)
+                        {
+                            <p class="range-warning text-danger mt-3">
+                                <i class="oi oi-lock-locked"></i> Button locked. Please reach the office to punch.
+                            </p>
+                        }
+                        else
+                        {
+                            <p class="range-warning text-success mt-3">
+                                <i class="oi oi-lock-unlocked"></i> You are in the office zone. You can punch now!
+                            </p>
+                        }
+                    }
+                }
+                
+                <!-- 🟢 DYNAMIC IN-OUT PASS SECTION -->
+                @if (HasPunchedIn && !IsAttendanceCompleted)
+                {
+                    <div class="mt-4 w-100 px-2">
+                        <!-- ☕ १. MOVEMENT REGISTER (SHORT BREAK) SECTION -->
+                       <div class="movement-section mb-3">
+    @if (!IsOnShortBreak)
+    {
+        <button class="btn-movement w-100" @onclick="HandleShortExit">
+            <i class="oi oi-media-play"></i> Movement Register (Tea/Lunch/Short Exit)
+        </button>
+    }
+    else
+    {
+        <button class="btn-movement-return w-100 shadow-sm" @onclick="HandleShortReturn">
+            <i class="oi oi-home"></i> Back to Desk (Mark Entry)
+        </button>
+
+        <div class="short-break-display mt-2 p-2 rounded shadow-sm border bg-white">
+            <div class="d-flex justify-content-between align-items: center;">
+                <div class="text-start">
+                    <small class="text-muted d-block">Exit Time</small>
+                    <span class="fw-bold text-dark" style="font-size: 14px;">
+                        <i class="oi oi-clock text-warning"></i> 
+                        @(ShortExitTime.HasValue ? DateTime.Today.Add(ShortExitTime.Value).ToString("hh:mm tt") : "-")
+                    </span>
+                </div>
+
+                @if (ExpectedReturnTime.HasValue)
+                {
+                    <div class="text-end">
+                        <small class="text-muted d-block">Return Expected</small>
+                        <span class="fw-bold @(DateTime.Now > ExpectedReturnTime.Value ? "text-danger" : "text-primary")" style="font-size: 14px;">
+                            <i class="oi oi-target"></i> 
+                            @ExpectedReturnTime.Value.ToString("hh:mm tt")
+                        </span>
+                    </div>
+                }
+            </div>
+
+            @if (ExpectedReturnTime.HasValue && DateTime.Now > ExpectedReturnTime.Value)
+            {
+                <div class="mt-2 py-1 px-2 bg-danger text-white rounded-pill text-center shadow-sm" style="font-size: 11px; font-weight: 700;">
+                    <i class="oi oi-warning"></i> LATE BY @((int)(DateTime.Now - ExpectedReturnTime.Value).TotalMinutes) MINS
+                </div>
+            }
+        </div>
+    }
+</div>
+                        <style>
+                            .short-break-display {
+    background-color: #ffffff;
+    border-left: 4px solid #f59e0b; /* Amber side border */
+}
+
+.short-break-display .text-danger {
+    animation: blink-text 1.5s infinite;
+}
+
+@@keyframes blink-text {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+                            /* Movement Register Button */
+                            .btn-movement {
+                                background: linear-gradient(135deg, #475569, #1e293b); /* Dark Grey/Blue */
+                                color: white;
+                                border: none;
+                                padding: 12px;
+                                border-radius: 12px;
+                                font-weight: 600;
+                                font-size: 14px;
+                                transition: 0.3s;
+                                box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+                            }
+
+                            .btn-movement-return {
+                                background: linear-gradient(135deg, #f59e0b, #d97706); /* Amber/Orange */
+                                color: white;
+                                border: none;
+                                padding: 12px;
+                                border-radius: 12px;
+                                font-weight: 600;
+                                font-size: 14px;
+                                animation: pulse-orange 2s infinite;
+                            }
+
+                            .short-break-timer {
+                                font-size: 12px;
+                                color: #d97706;
+                                margin-top: 8px;
+                                font-weight: bold;
+                            }
+
+                            @@keyframes pulse-orange {
+                                0%
+
+                            {
+                                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+                            }
+
+                            70% {
+                                box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+                            }
+
+                            100% {
+                                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+                            }
+
+                            }</style>
+                        <hr /> <!-- Separation line -->
+                        @if (string.IsNullOrEmpty(TodayOutPass?.Status))
+                        {
+                            <!-- No pass applied yet -->
+                            <button class="btn-gatepass w-100" @onclick="OpenOutPassModal">
+                                <i class="oi oi-briefcase"></i> Apply Out Pass
+                            </button>
+                        }
+                        else if (TodayOutPass.Status == "Pending")
+                        {
+                            <div class="outpass-status pending">
+                                <div class="status-icon">
+                                    <i class="oi oi-clock"></i>
+                                </div>
+                                <div class="status-content">
+                                    <div class="status-title">Awaiting Approval</div>
+                                    <div class="status-desc">
+                                        Your Out Pass request has been submitted and is waiting for HR approval.
+                                    </div>
+                                </div>
+                            </div>
+                        
+                        }
+                        else if (TodayOutPass.Status == "Approved" && TodayOutPass.IsReturned != true)
+                        {
+                            <!-- Approved by HR, Employee went outside, now needs to Return -->
+                            <button class="btn-gatepass w-100 text-white" style="background: linear-gradient(135deg, #10b981, #059669);" @onclick="OpenReturnModal">
+                                <i class="oi oi-check"></i> I Have Returned to Office
+                            </button>
+                        }
+                        else if (TodayOutPass.Status == "Rejected")
+                        {
+                            <!-- HR Rejected -->
+                            <div class="alert alert-danger p-2 text-center shadow-sm" style="font-size:14px; border-radius:10px; border-left: 4px solid #dc3545;">
+                                <i class="oi oi-warning"></i> Out Pass Rejected: @TodayOutPass.Comment
+                            </div>
+                            <!-- No pass applied yet -->
+                            <br />
+                            <button class="btn-gatepass w-100" @onclick="OpenOutPassModal">
+                                <i class="oi oi-briefcase"></i> Apply Out Pass / Short Break
+                            </button>
+                        }
+                        else if (TodayOutPass.IsReturned == true)
+                        {
+                            <!-- Process Completed -->
+                            <div class="alert alert-success p-2 text-center shadow-sm" style="font-size:14px; border-radius:10px; border-left: 4px solid #198754;">
+                                <i class="oi oi-circle-check"></i> Out Pass Process Completed.
+                            </div>
+                            <br>
+                            <!-- No pass applied yet -->
+                            <button class="btn-gatepass w-100" @onclick="OpenOutPassModal">
+                                <i class="oi oi-briefcase"></i> Apply Out Pass / Short Break
+                            </button>
+                        }
+                    </div>
+                }
+                <br />
+                <div class="mt-4">
+                    <a href="/my-report" class="view-report-btn">
+                        <i class="oi oi-document"></i> View Attendance Report
+                    </a>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- 🔴 PUNCH OUT CONFIRM MODAL -->
+<!-- ============================================== -->
+@if (ShowConfirmModal)
+{
+    <div class="modal-overlay">
+        <div class="confirm-modal">
+            <div class="modal-header"><h5>Confirm Punch Out</h5></div>
+            <div class="modal-body">
+                <p>You worked <strong>@WorkingHours</strong> today.</p>
+                <p>Are you sure you want to punch out?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" @onclick="CloseModal">Cancel</button>
+                <button class="btn-confirm" @onclick="ConfirmPunchOut">Punch Out</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ============================================== -->
+<!-- 🟢 1. APPLY OUT PASS MODAL -->
+@if (ShowOutPassModal)
+{
+    <div class="outpass-overlay">
+        <div class="op-modal">
+
+            <!-- Header -->
+            <div class="op-header">
+                <div class="op-header-icon">🪪</div>
+                <div class="op-header-text">
+                    <h5 class="op-title">In / Out Pass</h5>
+                    <p class="op-sub">Fill in your departure details</p>
+                </div>
+                <button class="op-close" @onclick="CloseOutPassModal">✕</button>
+            </div>
+
+            <div class="op-body">
+
+                <!-- Date -->
+                <div class="op-field">
+                    <label class="op-label"><span class="op-lbl-icon">📅</span> Date <span class="op-req">*</span></label>
+                    <input type="date" class="op-input" @bind="OutPassDate" />
+                </div>
+
+                <!-- Out Time + In Time side by side -->
+                <div class="op-time-row">
+                    <div class="op-time-card op-time-out">
+                        <div class="op-time-badge">OUT</div>
+                        <label class="op-time-label">🚪 Out Time <span class="op-req">*</span></label>
+                        <div class="op-time-selects">
+                            <select class="op-tsel" @bind="endSelectedHour" @bind:event="oninput" @onchange="OnTimeChanged">
+                                @for (int h = 1; h <= 12; h++)
+                                {
+                                    <option value="@h">@h.ToString("D2")</option>
+                                }
+                            </select>
+                            <span class="op-tsep">:</span>
+                            <select class="op-tsel" @bind="endSelectedMinute" @bind:event="oninput" @onchange="OnTimeChanged">
+                                @for (int m = 0; m < 60; m++)
+                                {
+                                    <option value="@m">@m.ToString("D2")</option>
+                                }
+                            </select>
+                            <select class="op-tsel op-ampm" @bind="endSelectedAmPm" @bind:event="oninput" @onchange="OnTimeChanged">
+                                <option>AM</option>
+                                <option>PM</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="op-time-arrow">→</div>
+
+                    <div class="op-time-card op-time-in">
+                        <div class="op-time-badge op-badge-in">IN</div>
+                        <label class="op-time-label">🏠 In Time <span class="op-req">*</span></label>
+                        <div class="op-time-selects">
+                            <select class="op-tsel" @bind="startSelectedHour" @bind:event="oninput" @onchange="OnTimeChanged">
+                                @for (int h = 1; h <= 12; h++)
+                                {
+                                    <option value="@h">@h.ToString("D2")</option>
+                                }
+                            </select>
+                            <span class="op-tsep">:</span>
+                            <select class="op-tsel" @bind="startSelectedMinute" @bind:event="oninput" @onchange="OnTimeChanged">
+                                @for (int m = 0; m < 60; m++)
+                                {
+                                    <option value="@m">@m.ToString("D2")</option>
+                                }
+                            </select>
+                            <select class="op-tsel op-ampm" @bind="startSelectedAmPm" @bind:event="oninput" @onchange="OnTimeChanged">
+                                <option>AM</option>
+                                <option>PM</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Duration badge -->
+                <div class="op-duration-row">
+                    <span class="op-dur-label">⏱ Approx Duration</span>
+                    <span class="op-dur-badge">@ApproxTimeString</span>
+                </div>
+
+                <!-- Reason -->
+                <div class="op-field">
+                    <label class="op-label"><span class="op-lbl-icon">📝</span> Reason <span class="op-req">*</span></label>
+                    <textarea class="op-input op-textarea" rows="3"
+                              @bind="OutPassReason"
+                              placeholder="Briefly describe your reason for going out..."></textarea>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="op-footer">
+                <button class="op-btn-cancel" @onclick="CloseOutPassModal">Cancel</button>
+                <button class="op-btn-submit" @onclick="SubmitOutPass" disabled="@IsSubmittingPass">
+                    @if (IsSubmittingPass)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span><span>Submitting...</span>
+                    }
+                    else
+                    {
+                        <span>📤 Submit Request</span>
+                    }
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+@if (ShowMovementModal)
+{
+    <div class="modal-overlay">
+        <div class="sb-modal">
+
+            <!-- Header -->
+            <div class="sb-header">
+                <div class="sb-header-icon">☕</div>
+                <div>
+                    <h5 class="sb-title">Short Break</h5>
+                    <p class="sb-sub">Tell us where you're headed</p>
+                </div>
+                <button class="sb-close" @onclick="() => ShowMovementModal = false">✕</button>
+            </div>
+
+            <div class="sb-body">
+
+                <!-- Reason Pills -->
+                <p class="sb-label">Select Reason</p>
+                <div class="sb-reason-grid">
+                    @foreach (var r in new[] {
+                        ("Tea Break","☕","Tea / Coffee"),
+                        ("Lunch Break","🍽️","Lunch"),
+                        ("Personal Work","🚶","Personal"),
+                        ("Official Work","💼","Official"),
+                        ("Other","📝","Other")
+                    })
+                    {
+                        var rv = r.Item1; var icon = r.Item2; var lbl = r.Item3;
+                        <button class="sb-reason-btn @(SelectedMovementReason == rv ? "sb-reason-active" : "")"
+                                @onclick="() => SelectedMovementReason = rv">
+                            <span class="sb-reason-icon">@icon</span>
+                            <span class="sb-reason-lbl">@lbl</span>
+                        </button>
+                    }
+                </div>
+
+                <!-- Duration Pills -->
+                <p class="sb-label mt-3">Expected Duration</p>
+                <div class="sb-dur-row">
+                    @foreach (var d in new[] { (5,"5m"),(10,"10m"),(15,"15m"),(20,"20m"),(30,"30m"),(45,"45m"),(60,"1hr") })
+                    {
+                        var dv = d.Item1; var dl = d.Item2;
+                        <button class="sb-dur-btn @(SelectedBreakDuration == dv ? "sb-dur-active" : "")"
+                                @onclick="() => SelectedBreakDuration = dv">
+                            @dl
+                        </button>
+                    }
+                </div>
+
+                <!-- Return time card -->
+                <div class="sb-return-card">
+                    <div class="sb-return-left">
+                        <span class="sb-return-icon">🕐</span>
+                        <div>
+                            <span class="sb-return-label">Expected return by</span>
+                            <span class="sb-return-time">@DateTime.Now.AddMinutes(SelectedBreakDuration).ToString("hh:mm tt")</span>
+                        </div>
+                    </div>
+                    <span class="sb-return-min">@SelectedBreakDuration min</span>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="sb-footer">
+                <button class="sb-btn-cancel" @onclick="() => ShowMovementModal = false">Cancel</button>
+                <button class="sb-btn-start" @onclick="ConfirmShortExit">
+                    <span>🚀</span> Start Break
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+@if (ShowMovementReturnModal)
+{
+    <div class="modal-overlay">
+        <div class="lr-modal animate-pop">
+
+            <!-- Header -->
+            <div class="lr-header">
+                <div class="lr-header-icon">⚠️</div>
+                <div class="lr-header-text">
+                    <h5 class="lr-title">Late Return Warning</h5>
+                    <p class="lr-sub">Please provide a reason to continue</p>
+                </div>
+            </div>
+
+            <!-- Late Time Badge -->
+            <div class="lr-late-badge">
+                <div class="lr-late-inner">
+                    <span class="lr-late-icon">🕐</span>
+                    <div>
+                        <span class="lr-late-label">You are late by</span>
+                        <span class="lr-late-mins">@((int)(DateTime.Now - ExpectedReturnTime.Value).TotalMinutes) minutes</span>
+                    </div>
+                </div>
+                <div class="lr-time-row">
+                    <div class="lr-time-item">
+                        <span class="lr-time-lbl">Expected</span>
+                        <span class="lr-time-val lr-time-green">@ExpectedReturnTime.Value.ToString("hh:mm tt")</span>
+                    </div>
+                    <span class="lr-time-arrow">→</span>
+                    <div class="lr-time-item">
+                        <span class="lr-time-lbl">Actual</span>
+                        <span class="lr-time-val lr-time-red">@DateTime.Now.ToString("hh:mm tt")</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reason Input -->
+            <div class="lr-body">
+                <label class="lr-reason-label">Reason for delay <span class="lr-req">*</span></label>
+                <textarea class="lr-textarea"
+                          @bind="MovementLateReason"
+                          rows="3"
+                          placeholder="e.g. Traffic jam, Extended meeting, Personal emergency..."></textarea>
+                @if (string.IsNullOrWhiteSpace(MovementLateReason))
+                {
+                    <span class="lr-hint">Required — cannot confirm without a reason.</span>
+                }
+            </div>
+
+            <!-- Footer -->
+            <div class="lr-footer">
+                <button class="lr-btn-cancel" @onclick="() => ShowMovementReturnModal = false">Cancel</button>
+                <button class="lr-btn-confirm" @onclick="ConfirmReturnNow" disabled="@string.IsNullOrWhiteSpace(MovementLateReason)">
+                    Confirm Return
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+<style>
+    /* ── SHORT BREAK MODAL ───────────────────────────────────────── */
+    .sb-modal {
+        background: #fff;
+        width: 95%;
+        max-width: 420px;
+        border-radius: 24px;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.18);
+        overflow: hidden;
+        font-family: 'Inter','Segoe UI',sans-serif;
+    }
+
+    /* Header */
+    .sb-header {
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        padding: 20px 20px 18px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .sb-header-icon {
+        width: 48px; height: 48px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 14px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px; flex-shrink: 0;
+    }
+    .sb-title {
+        color: #fff; font-size: 18px; font-weight: 800; margin: 0; line-height: 1.2;
+    }
+    .sb-sub {
+        color: rgba(255,255,255,0.7); font-size: 12px; margin: 2px 0 0; font-weight: 500;
+    }
+    .sb-close {
+        margin-left: auto; background: rgba(255,255,255,0.15);
+        border: none; color: #fff; width: 32px; height: 32px;
+        border-radius: 50%; font-size: 14px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; transition: 0.15s;
+    }
+    .sb-close:hover { background: rgba(255,255,255,0.3); }
+
+    /* Body */
+    .sb-body { padding: 20px; }
+
+    .sb-label {
+        font-size: 12px; font-weight: 700; color: #64748b;
+        text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 10px;
+    }
+
+    /* Reason pills */
+    .sb-reason-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+    }
+    .sb-reason-btn {
+        display: flex; flex-direction: column; align-items: center;
+        gap: 5px; padding: 10px 6px; border-radius: 12px;
+        border: 1.5px solid #e2e8f0; background: #f8fafc;
+        cursor: pointer; transition: 0.15s;
+    }
+    .sb-reason-btn:hover { border-color: #a5b4fc; background: #eef2ff; }
+    .sb-reason-active {
+        border-color: #4f46e5 !important;
+        background: #eef2ff !important;
+        box-shadow: 0 0 0 3px rgba(79,70,229,0.12);
+    }
+    .sb-reason-icon { font-size: 20px; line-height: 1; }
+    .sb-reason-lbl  { font-size: 10px; font-weight: 700; color: #475569; text-align: center; line-height: 1.2; }
+    .sb-reason-active .sb-reason-lbl { color: #4f46e5; }
+
+    /* Duration pills */
+    .sb-dur-row {
+        display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .sb-dur-btn {
+        padding: 7px 14px; border-radius: 20px;
+        border: 1.5px solid #e2e8f0; background: #f8fafc;
+        font-size: 12px; font-weight: 700; color: #475569;
+        cursor: pointer; transition: 0.15s;
+    }
+    .sb-dur-btn:hover { border-color: #a5b4fc; background: #eef2ff; color: #4f46e5; }
+    .sb-dur-active {
+        background: #4f46e5 !important;
+        border-color: #4f46e5 !important;
+        color: #fff !important;
+        box-shadow: 0 4px 12px rgba(79,70,229,0.35);
+    }
+
+    /* Return time card */
+    .sb-return-card {
+        margin-top: 16px;
+        background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+        border: 1.5px solid #86efac;
+        border-radius: 14px;
+        padding: 14px 16px;
+        display: flex; align-items: center; justify-content: space-between;
+    }
+    .sb-return-left { display: flex; align-items: center; gap: 12px; }
+    .sb-return-icon { font-size: 24px; }
+    .sb-return-label { display: block; font-size: 11px; color: #15803d; font-weight: 600; }
+    .sb-return-time  { display: block; font-size: 20px; font-weight: 900; color: #14532d; line-height: 1.1; }
+    .sb-return-min {
+        background: #16a34a; color: #fff;
+        font-size: 12px; font-weight: 700;
+        padding: 5px 12px; border-radius: 20px;
+    }
+
+    /* Footer */
+    .sb-footer {
+        display: flex; gap: 10px;
+        padding: 14px 20px 20px;
+        border-top: 1px solid #f1f5f9;
+    }
+    .sb-btn-cancel {
+        flex: 1; padding: 12px;
+        border-radius: 12px; border: 1.5px solid #e2e8f0;
+        background: #f8fafc; color: #475569;
+        font-size: 14px; font-weight: 700; cursor: pointer;
+        transition: 0.15s;
+    }
+    .sb-btn-cancel:hover { background: #e2e8f0; }
+    .sb-btn-start {
+        flex: 2; padding: 12px;
+        border-radius: 12px; border: none;
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        color: #fff; font-size: 14px; font-weight: 700;
+        cursor: pointer; transition: 0.15s;
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        box-shadow: 0 4px 14px rgba(79,70,229,0.4);
+    }
+    .sb-btn-start:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    /* =============================================
+       ⚠️ LATE RETURN MODAL
+    ============================================= */
+    .lr-modal {
+        background: #fff;
+        width: 95%;
+        max-width: 420px;
+        border-radius: 24px;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.2);
+        overflow: hidden;
+        font-family: 'Inter','Segoe UI',sans-serif;
+    }
+
+    .animate-pop {
+        animation: lrPop 0.3s cubic-bezier(0.26,0.53,0.74,1.48);
+    }
+
+    @keyframes lrPop {
+        0%   { opacity:0; transform:scale(0.8); }
+        100% { opacity:1; transform:scale(1); }
+    }
+
+    /* Header */
+    .lr-header {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        padding: 20px 20px 18px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .lr-header-icon {
+        width: 50px; height: 50px; min-width: 50px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 14px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 26px;
+    }
+    .lr-title {
+        color: #fff; font-size: 18px; font-weight: 800; margin: 0; line-height: 1.2;
+    }
+    .lr-sub {
+        color: rgba(255,255,255,0.75); font-size: 12px; margin: 3px 0 0; font-weight: 500;
+    }
+
+    /* Late Badge */
+    .lr-late-badge {
+        background: linear-gradient(135deg, #fff7ed, #ffedd5);
+        border-bottom: 1.5px solid #fed7aa;
+        padding: 16px 20px;
+    }
+    .lr-late-inner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .lr-late-icon { font-size: 28px; }
+    .lr-late-label {
+        display: block; font-size: 11px; font-weight: 700;
+        color: #92400e; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .lr-late-mins {
+        display: block; font-size: 24px; font-weight: 900; color: #c2410c;
+        line-height: 1.1;
+    }
+
+    /* Time Row */
+    .lr-time-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(255,255,255,0.6);
+        border-radius: 12px;
+        padding: 10px 14px;
+        border: 1px solid #fed7aa;
+    }
+    .lr-time-item { display: flex; flex-direction: column; gap: 2px; }
+    .lr-time-lbl { font-size: 10px; font-weight: 700; color: #92400e; text-transform: uppercase; }
+    .lr-time-val { font-size: 16px; font-weight: 800; }
+    .lr-time-green { color: #15803d; }
+    .lr-time-red   { color: #dc2626; }
+    .lr-time-arrow { font-size: 18px; color: #d97706; font-weight: 800; flex: 1; text-align: center; }
+
+    /* Body */
+    .lr-body { padding: 18px 20px 10px; }
+    .lr-reason-label {
+        display: block;
+        font-size: 12px; font-weight: 700; color: #475569;
+        text-transform: uppercase; letter-spacing: 0.4px;
+        margin-bottom: 8px;
+    }
+    .lr-req { color: #ef4444; margin-left: 3px; }
+    .lr-textarea {
+        width: 100%;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 12px 14px;
+        font-size: 14px; font-family: inherit;
+        color: #1e293b;
+        background: #f8fafc;
+        resize: none; outline: none;
+        transition: 0.2s;
+    }
+    .lr-textarea:focus {
+        border-color: #f59e0b;
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(245,158,11,0.15);
+    }
+    .lr-hint {
+        display: block;
+        font-size: 11px; color: #ef4444; font-weight: 600;
+        margin-top: 6px;
+    }
+
+    /* Footer */
+    .lr-footer {
+        display: flex; gap: 10px;
+        padding: 14px 20px 20px;
+        border-top: 1px solid #f1f5f9;
+    }
+    .lr-btn-cancel {
+        flex: 1; padding: 13px;
+        border-radius: 12px; border: 1.5px solid #e2e8f0;
+        background: #f8fafc; color: #475569;
+        font-size: 14px; font-weight: 700; cursor: pointer; transition: 0.15s;
+    }
+    .lr-btn-cancel:hover { background: #e2e8f0; }
+    .lr-btn-confirm {
+        flex: 2; padding: 13px;
+        border-radius: 12px; border: none;
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        color: #fff; font-size: 14px; font-weight: 700;
+        cursor: pointer; transition: 0.15s;
+        box-shadow: 0 4px 14px rgba(245,158,11,0.4);
+    }
+    .lr-btn-confirm:hover:not(:disabled) { opacity:0.9; transform:translateY(-1px); }
+    .lr-btn-confirm:disabled { background: #cbd5e1; box-shadow: none; cursor: not-allowed; }
+    /* 1. Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.4); /* थोडा डार्क बॅकग्राउंड */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 3000;
+    backdrop-filter: blur(2px); /* बॅकग्राउंड ब्लर करण्यासाठी */
+}
+
+/* 2. Modal Container */
+.confirm-modal {
+    background: #ffffff;
+    width: 90%;
+    max-width: 420px;
+    border-radius: 25px; /* इमेजप्रमाणे जास्त राऊंड कॉर्नर्स */
+    padding: 30px 20px;
+    text-align: center;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+    border: none;
+}
+
+/* 3. Header Title */
+.confirm-modal h5 {
+    font-weight: 800;
+    color: #1e293b;
+    margin-bottom: 25px;
+    font-size: 18px;
+}
+
+/* 4. Form Labels & Selects */
+.modal-body label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #64748b;
+    margin-right: 10px;
+}
+
+.modal-body .form-select {
+    display: inline-block;
+    width: auto;
+    min-width: 150px;
+    border-radius: 12px;
+    border: 1px solid #cbd5e1;
+    padding: 6px 12px;
+    font-size: 14px;
+    margin-bottom: 15px;
+    background-color: #f8fafc;
+}
+
+/* 5. Expected Return Badge (Pill Style) */
+.expected-return-info {
+    background: #f0f9ff;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+    border-radius: 50px; /* पिल शेप */
+    padding: 6px 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 10px 0 25px;
+}
+
+/* 6. Footer Buttons Container */
+.modal-footer {
+    display: flex;
+    gap: 15px;
+    border-top: none;
+    padding: 0;
+    justify-content: center;
+}
+
+/* 7. Cancel Button */
+.btn-cancel {
+    background: #e2e8f0;
+    color: #475569;
+    border: none;
+    padding: 12px 0;
+    flex: 1;
+    border-radius: 14px;
+    font-weight: 700;
+    font-size: 15px;
+    transition: 0.2s;
+}
+
+.btn-cancel:hover {
+    background: #cbd5e1;
+}
+
+/* 8. Start Break Button (Purple Gradient) */
+.btn-confirm-purple {
+    background: linear-gradient(135deg, #6366f1, #4f46e5); /* इमेजमधील कलर */
+    color: white;
+    border: none;
+    padding: 12px 0;
+    flex: 1;
+    border-radius: 14px;
+    font-weight: 700;
+    font-size: 15px;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    transition: 0.3s;
+}
+
+.btn-confirm-purple:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(79, 70, 229, 0.4);
+}</style>
+<!-- ============================================== -->
+<!-- 🔵 2. MARK AS RETURNED MODAL (NEW) -->
+<!-- ============================================== -->
+@if (ShowReturnModal && TodayOutPass != null)
+{
+    <div class="outpass-overlay">
+        <div class="outpass-modal">
+            <div class="outpass-header bg-primary">
+                <h5>Mark Return to Office</h5>
+                <button class="outpass-close" @onclick="CloseReturnModal">×</button>
+            </div>
+
+            <div class="outpass-body">
+                <p class="text-center fw-bold mb-3" style="color: #334155;">Welcome back! Please confirm your return.</p>
+
+                @{
+                    var actualTime = DateTime.Now.TimeOfDay;
+                    var inTime = TodayOutPass.InTime.Value;
+                    bool isLate = actualTime > inTime;
+                    TimeSpan buffer = isLate ? actualTime - inTime : TimeSpan.Zero;
+                }
+
+                <div class="d-flex justify-content-between mb-3 p-3 bg-light rounded shadow-sm border">
+                    <div class="text-center">
+                        <small class="text-muted d-block">Expected In Time</small>
+                        <b class="text-dark">@DateTime.Today.Add(inTime).ToString("hh:mm tt")</b>
+                    </div>
+                    <br />
+                    <div class="text-center border-start ps-3">
+                        <small class="text-muted d-block">Actual Return Time</small>
+                        <b class="text-primary">@DateTime.Now.ToString("hh:mm tt")</b>
+                    </div>
+                </div>
+
+                @if (isLate)
+                {
+                    <br />
+                    <div class="alert alert-danger p-2 mb-3 text-center" style="font-size: 16px;">
+                        <i class="oi oi-warning"></i> You are late by <b>@buffer.Hours hrs @buffer.Minutes mins</b>.
+                    </div>
+                    <br />
+                    <div class="outpass-group">
+                        <label>Reason for late return <span class="outpass-required">*</span></label>
+                        <textarea class="outpass-input" rows="2" @bind="ReturnLateReason" placeholder="e.g. Traffic, Meeting extended..."></textarea>
+                    </div>
+                }
+                else
+                {
+
+                    <br />
+                    <div class="alert alert-success p-2 mb-3 text-center" style="font-size: 16px;">
+                        <i class="oi oi-circle-check"></i> Great! You returned on time.
+                    </div>
+                }
+            </div>
+
+            <div class="outpass-footer">
+                <button class="outpass-btn outpass-cancel" @onclick="CloseReturnModal">Cancel</button>
+                <button class="outpass-btn outpass-save bg-primary text-white" @onclick="SubmitReturn" disabled="@IsSubmittingReturn">
+                    @if (IsSubmittingReturn)
+                    {
+                        <span>Confirming...</span>
+                    }
+                    else
+                    {
+
+                        <span>Confirm Return</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+<style>
+    /* ============================================== */
+    /* 🏷️ MODE INDICATOR STYLES                       */
+    /* ============================================== */
+    .mode-indicator-container {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 25px;
+    }
+
+    .mode-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 20px;
+        border-radius: 30px;
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+
+    .office-active {
+        background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+        color: #0369a1;
+        border: 1px solid #7dd3fc;
+    }
+
+    .wfh-active {
+        background: linear-gradient(135deg, #fef3c7, #fde68a);
+        color: #92400e;
+        border: 1px solid #fcd34d;
+    }
+
+    /* ============================================== */
+    /* 📸 WFH SELFIE CAMERA STYLES                    */
+    /* ============================================== */
+    .camera-container {
+        background: #ffffff;
+        padding: 18px;
+        border-radius: 20px;
+        border: 1px solid #e9ecef;
+        margin-bottom: 25px;
+        width: 100%;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+        animation: fadeIn 0.4s ease;
+    }
+
+    .camera-preview-box {
+        position: relative;
+        border-radius: 14px;
+        overflow: hidden;
+        background: #000;
+        border: 3px solid #f8f9fa;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        margin-bottom: 16px;
+    }
+
+    #videoFeed {
+        width: 100%;
+        height: 240px;
+        object-fit: cover; /* यामुळे व्हिडीओ स्ट्रेच होणार नाही */
+        display: block;
+        transform: scaleX(-1); /* मिरर इफेक्ट (सेल्फीसारखे दिसण्यासाठी) */
+    }
+
+    .camera-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
+        color: #ffffff;
+        padding: 20px 10px 10px;
+        font-size: 13px;
+        font-weight: 600;
+        text-align: center;
+        letter-spacing: 0.5px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 6px;
+    }
+
+    /* 📸 Custom Photo Button (Matches App UI) */
+    .btn-take-photo {
+        background: linear-gradient(135deg, #8b5cf6, #3b82f6); /* Purple to Blue Gradient */
+        color: white;
+        border: none;
+        width: 100%;
+        padding: 14px;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 700;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+        cursor: pointer;
+    }
+
+        .btn-take-photo:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 15px 25px rgba(59, 130, 246, 0.4);
+            background: linear-gradient(135deg, #7c3aed, #2563eb);
+        }
+
+        .btn-take-photo:active {
+            transform: scale(0.96);
+        }
+
+    /* ============================= */
+    /* 🔥 OUTPASS STATUS UI */
+    /* ============================= */
+
+    .outpass-status {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        font-size: 13px;
+        margin-top: 10px;
+        animation: fadeSlide 0.3s ease;
+    }
+
+    /* Icon */
+    .status-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+    }
+
+    /* Content */
+    .status-title {
+        font-weight: 700;
+        font-size: 14px;
+    }
+
+    .status-desc {
+        font-size: 12px;
+        opacity: 0.9;
+    }
+
+    /* Pending Style */
+    .outpass-status.pending {
+        background: linear-gradient(135deg, #fff8e1, #fffbeb);
+        border-left: 5px solid #f59e0b;
+        color: #92400e;
+    }
+
+        .outpass-status.pending .status-icon {
+            background: #fef3c7;
+            color: #f59e0b;
+        }
+
+    /* Animation */
+    @@keyframes fadeSlide {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }</style>
+<style>
+    /* Add this missing CSS for new alerts */
+    .btn-outline-danger {
+        border-color: #dc3545;
+        color: #dc3545;
+        background: transparent;
+    }
+
+        .btn-outline-danger:hover {
+            background: #dc3545;
+            color: white;
+        }
+
+    /* Main App CSS */
+    .completed-btn {
+        background: #d1fae5;
+        color: #065f46;
+        box-shadow: none;
+    }
+
+    .attendance-wrapper {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        margin: -1.5rem;
+    }
+
+    .attendance-card {
+        background: #ffffff;
+        width: 100%;
+        max-width: 550px;
+        border-radius: 24px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+        padding: 40px 30px;
+        text-align: center;
+    }
+
+    .top-badges {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+
+    .badge-pill {
+        background: #e1f0ff;
+        color: #007bff;
+        padding: 8px 18px;
+        border-radius: 30px;
+        font-size: 13px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .card-header-modern h2 {
+        margin: 0 0 5px;
+        font-size: 26px;
+        font-weight: 700;
+        color: #2c3e50;
+    }
+
+    .card-header-modern .subtitle {
+        color: #7f8c8d;
+        font-size: 14px;
+        margin-bottom: 25px;
+    }
+
+    .status-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+        margin-bottom: 30px;
+    }
+
+    .status-box {
+        background: #f8f9fa;
+        padding: 15px 10px;
+        border-radius: 16px;
+        border: 1px solid #e9ecef;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .status-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #adb5bd;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+    }
+
+    .status-value {
+        font-size: 14px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .text-success {
+        color: #20c997;
+    }
+
+    .text-danger {
+        color: #ff4757;
+    }
+
+    .text-warning {
+        color: #ffa502;
+    }
+
+    .text-info {
+        color: #17a2b8;
+    }
+
+    .punch-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .punch-btn {
+        width: 170px;
+        height: 170px;
+        border-radius: 50%;
+        border: none;
+        color: white;
+        cursor: pointer;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .btn-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .punch-icon {
+        font-size: 40px;
+    }
+
+    .punch-text {
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: 1px;
+    }
+
+    .btn-punch-in {
+        background: linear-gradient(135deg, #00b09b, #96c93d);
+        box-shadow: 0 15px 25px rgba(0, 176, 155, 0.4);
+    }
+
+    .btn-punch-out {
+        background: linear-gradient(135deg, #ff416c, #ff4b2b);
+        box-shadow: 0 15px 25px rgba(255, 65, 108, 0.4);
+    }
+
+    .punch-btn:hover:not(.disabled-btn) {
+        transform: translateY(-5px) scale(1.03);
+        box-shadow: 0 20px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .punch-btn:active:not(.disabled-btn) {
+        transform: scale(0.95);
+    }
+
+    .disabled-btn {
+        background: #e0e0e0;
+        color: #9e9e9e;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+
+    .range-warning {
+        font-size: 13px;
+        font-weight: 500;
+    }
+
+    .custom-alert {
+        padding: 12px 20px;
+        border-radius: 12px;
+        margin-bottom: 25px;
+        font-size: 14px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .alert-success {
+        background: #e8f8f5;
+        border: 1px solid #a3e4d7;
+        color: #117a65;
+    }
+
+    .alert-danger {
+        background: #fdedec;
+        border: 1px solid #f5b7b1;
+        color: #c0392b;
+    }
+
+    .alert-info {
+        background: #ebf5fb;
+        border: 1px solid #aed6f1;
+        color: #2980b9;
+    }
+
+    .loading-state {
+        padding: 40px 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .pulse-spinner {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: #3498db;
+        animation: pulse 1.5s infinite ease-in-out;
+        margin-bottom: 20px;
+    }
+
+    @@keyframes pulse {
+        0% {
+            transform: scale(0.8);
+            opacity: 0.5;
+        }
+
+        50% {
+            transform: scale(1.2);
+            opacity: 1;
+        }
+
+        100% {
+            transform: scale(0.8);
+            opacity: 0.5;
+        }
+    }
+
+    @@media (max-width: 576px) {
+        .attendance-wrapper {
+            padding: 10px;
+            align-items: flex-start;
+        }
+
+        .attendance-card {
+            padding: 25px 15px;
+            border-radius: 20px;
+            margin-top: 10px;
+        }
+
+        .status-grid {
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+
+        .punch-btn {
+            width: 140px;
+            height: 140px;
+        }
+
+        .punch-icon {
+            font-size: 30px;
+        }
+
+        .punch-text {
+            font-size: 15px;
+        }
+    }
+
+    /* Modals Overlay CSS */
+    .modal-overlay, .outpass-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(15, 23, 42, 0.65);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+    }
+
+    .confirm-modal {
+        background: #fff;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 350px;
+        padding: 20px;
+        text-align: center;
+        animation: fadeIn 0.3s ease;
+    }
+
+    .modal-header h5 {
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    .modal-body p {
+        margin: 5px 0;
+        color: #555;
+    }
+
+    .modal-footer {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 20px;
+    }
+
+    .btn-cancel, .btn-confirm {
+        flex: 1;
+        padding: 10px;
+        border-radius: 10px;
+        cursor: pointer;
+        border: none;
+    }
+
+    .btn-cancel {
+        margin-right: 5px;
+        background: #e2e8f0;
+    }
+
+    .btn-confirm {
+        margin-left: 5px;
+        background: linear-gradient(135deg, #ff416c, #ff4b2b);
+        color: white;
+    }
+
+    /* ── IN/OUT PASS MODAL ─────────────────────────────────────── */
+    .op-modal {
+        background: #fff;
+        width: 95%;
+        max-width: 480px;
+        border-radius: 24px;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.18);
+        overflow: hidden;
+        font-family: 'Inter','Segoe UI',sans-serif;
+    }
+
+    /* Header */
+    .op-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #0ea5e9 100%);
+        padding: 20px 20px 18px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .op-header-icon {
+        width: 50px; height: 50px;
+        background: rgba(255,255,255,0.15);
+        border-radius: 14px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 24px; flex-shrink: 0;
+    }
+    .op-header-text { flex: 1; }
+    .op-title { color: #fff; font-size: 18px; font-weight: 800; margin: 0; }
+    .op-sub   { color: rgba(255,255,255,0.65); font-size: 12px; margin: 2px 0 0; }
+    .op-close {
+        background: rgba(255,255,255,0.15); border: none; color: #fff;
+        width: 32px; height: 32px; border-radius: 50%; font-size: 14px;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; transition: 0.15s;
+    }
+    .op-close:hover { background: rgba(255,255,255,0.3); }
+
+    /* Body */
+    .op-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+    .op-field { display: flex; flex-direction: column; gap: 7px; }
+    .op-label {
+        font-size: 12px; font-weight: 700; color: #475569;
+        text-transform: uppercase; letter-spacing: 0.4px;
+        display: flex; align-items: center; gap: 5px;
+    }
+    .op-lbl-icon { font-size: 14px; }
+    .op-req { color: #ef4444; }
+
+    .op-input {
+        width: 100%; padding: 11px 14px;
+        border: 1.5px solid #e2e8f0; border-radius: 12px;
+        font-size: 14px; color: #1e293b;
+        background: #f8fafc; outline: none;
+        transition: 0.15s; font-family: inherit;
+    }
+    .op-input:focus { border-color: #0ea5e9; background: #fff; box-shadow: 0 0 0 3px rgba(14,165,233,0.12); }
+    .op-textarea { resize: none; line-height: 1.5; }
+
+    /* Time row — side by side cards */
+    .op-time-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .op-time-card {
+        flex: 1;
+        border-radius: 14px;
+        padding: 12px 12px 10px;
+        position: relative;
+        border: 1.5px solid #e2e8f0;
+    }
+    .op-time-out { background: #fff7ed; border-color: #fed7aa; }
+    .op-time-in  { background: #f0fdf4; border-color: #86efac; }
+
+    .op-time-badge {
+        position: absolute; top: -10px; left: 12px;
+        background: #f97316; color: #fff;
+        font-size: 10px; font-weight: 800;
+        padding: 2px 8px; border-radius: 6px;
+        letter-spacing: 0.5px;
+    }
+    .op-badge-in { background: #16a34a; }
+
+    .op-time-label {
+        font-size: 11px; font-weight: 700; color: #475569;
+        display: block; margin-bottom: 8px;
+    }
+    .op-time-selects {
+        display: flex; align-items: center; gap: 4px;
+    }
+    .op-tsel {
+        flex: 1; padding: 7px 4px;
+        border: 1.5px solid #e2e8f0; border-radius: 8px;
+        background: #fff; font-size: 13px; font-weight: 700;
+        color: #1e293b; text-align: center; outline: none;
+        cursor: pointer;
+    }
+    .op-tsel:focus { border-color: #0ea5e9; }
+    .op-ampm { flex: 0.8; font-size: 11px; }
+    .op-tsep { font-size: 16px; font-weight: 800; color: #64748b; }
+
+    .op-time-arrow {
+        font-size: 20px; color: #94a3b8; font-weight: 700; flex-shrink: 0;
+    }
+
+    /* Duration row */
+    .op-duration-row {
+        display: flex; align-items: center; justify-content: space-between;
+        background: #f0f9ff; border: 1.5px solid #bae6fd;
+        border-radius: 12px; padding: 10px 16px;
+    }
+    .op-dur-label { font-size: 13px; font-weight: 600; color: #0369a1; }
+    .op-dur-badge {
+        background: #0ea5e9; color: #fff;
+        font-size: 13px; font-weight: 800;
+        padding: 4px 14px; border-radius: 20px;
+    }
+
+    /* Footer */
+    .op-footer {
+        display: flex; gap: 10px;
+        padding: 14px 20px 20px;
+        border-top: 1px solid #f1f5f9;
+    }
+    .op-btn-cancel {
+        flex: 1; padding: 12px;
+        border-radius: 12px; border: 1.5px solid #e2e8f0;
+        background: #f8fafc; color: #475569;
+        font-size: 14px; font-weight: 700; cursor: pointer; transition: 0.15s;
+    }
+    .op-btn-cancel:hover { background: #e2e8f0; }
+    .op-btn-submit {
+        flex: 2; padding: 12px;
+        border-radius: 12px; border: none;
+        background: linear-gradient(135deg, #0f172a, #1e3a5f);
+        color: #fff; font-size: 14px; font-weight: 700;
+        cursor: pointer; transition: 0.15s;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+        box-shadow: 0 4px 14px rgba(15,23,42,0.35);
+    }
+    .op-btn-submit:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+    .op-btn-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    /* Modal Form UI */
+    .outpass-modal {
+        background: #ffffff;
+        width: 100%;
+        max-width: 420px;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        animation: fadeIn 0.25s ease;
+    }
+
+    .outpass-header {
+        background: linear-gradient(135deg, #20c997, #17a2b8);
+        color: #fff;
+        padding: 14px 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+        .outpass-header h5 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+    .outpass-close {
+        background: transparent;
+        border: none;
+        font-size: 20px;
+        color: #fff;
+        cursor: pointer;
+    }
+
+    .outpass-body {
+        padding: 18px;
+    }
+
+    .outpass-group {
+        margin-bottom: 14px;
+        text-align: left;
+    }
+
+        .outpass-group label {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+    .outpass-required {
+        color: #dc3545;
+    }
+
+    .outpass-input {
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 13px;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+        transition: all 0.2s ease;
+    }
+
+        .outpass-input:focus {
+            border-color: #20c997;
+            box-shadow: 0 0 0 3px rgba(32,201,151,0.15);
+            outline: none;
+        }
+
+    .outpass-readonly {
+        background: #f8fafc;
+    }
+
+    .outpass-time {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+    }
+
+        .outpass-time select {
+            width: 70px;
+            padding: 6px;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+            font-weight: 600;
+        }
+
+    .outpass-footer {
+        display: flex;
+        gap: 10px;
+        padding: 14px 18px;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .outpass-btn {
+        flex: 1;
+        padding: 10px;
+        border-radius: 10px;
+        border: none;
+        font-size: 14px;
+        font-weight: 600;
+        transition: 0.2s;
+        cursor: pointer;
+    }
+
+    .outpass-cancel {
+        background: #e2e8f0;
+    }
+
+        .outpass-cancel:hover {
+            background: #cbd5e1;
+        }
+
+    .outpass-save {
+        background: #20c997;
+        color: white;
+    }
+
+        .outpass-save:hover {
+            background: #17a589;
+        }
+
+    .btn-gatepass {
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        color: white;
+        border: none;
+        padding: 10px;
+        border-radius: 10px;
+        font-weight: 600;
+        transition: 0.3s;
+    }
+
+        .btn-gatepass:hover {
+            background: #4338ca;
+        }
+
+    @@keyframes fadeIn {
+        from {
+            transform: translateY(20px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+</style>
+
+<!-- ============================================== -->
+<!-- 🎂 BIRTHDAY BLASTER MODAL (CENTER POPUP) -->
+<!-- ============================================== -->
+@if (ShowBirthdayModal)
+{
+    <div class="bday-overlay">
+        <div class="bday-modal">
+            <!-- Confetti Effect (CSS) -->
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+
+            <div class="bday-icon-large">🎉</div>
+            <h2 class="bday-title">Happy Birthday! 🎂</h2>
+            <h3 class="bday-name">@(string.IsNullOrEmpty(EmployeeName) ? "User" : EmployeeName.Split(' ')[0])</h3>
+
+            <p class="bday-desc">Wishing you a fantastic day ahead and a year filled with success and happiness!</p>
+
+            <button class="bday-btn" @onclick="() => ShowBirthdayModal = false">
+                Thank You! ✨
+            </button>
+        </div>
+    </div>
+}
+<style>
+    /* ============================================== */
+    /* 🎂 BIRTHDAY CENTER POP-UP (BLASTER EFFECT)     */
+    /* ============================================== */
+    .bday-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(15, 23, 42, 0.7);
+        backdrop-filter: blur(5px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 3000;
+        animation: fadeInOverlay 0.3s ease-out;
+    }
+
+    .bday-modal {
+        background: #ffffff;
+        width: 90%;
+        max-width: 380px;
+        border-radius: 24px;
+        padding: 40px 20px;
+        text-align: center;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
+        position: relative;
+        overflow: hidden;
+        animation: blastIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55); /* Bouncy Blast Effect */
+    }
+
+        .bday-modal::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 10px;
+            background: linear-gradient(90deg, #ff9a9e, #fecfef, #ff9a9e);
+        }
+
+    .bday-icon-large {
+        font-size: 70px;
+        margin-bottom: 10px;
+        animation: floatIcon 2s infinite ease-in-out;
+    }
+
+    .bday-title {
+        color: #d63031;
+        font-size: 24px;
+        font-weight: 800;
+        margin: 0;
+    }
+
+    .bday-name {
+        color: #2d3436;
+        font-size: 28px;
+        font-weight: 900;
+        margin: 5px 0 15px;
+        background: -webkit-linear-gradient(45deg, #ff6b81, #ff4757);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .bday-desc {
+        color: #636e72;
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 1.5;
+        margin-bottom: 25px;
+        padding: 0 15px;
+    }
+
+    .bday-btn {
+        background: linear-gradient(135deg, #ff4757, #ff6b81);
+        color: #fff;
+        border: none;
+        padding: 12px 35px;
+        border-radius: 30px;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 10px 20px rgba(255, 71, 87, 0.3);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+        .bday-btn:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 15px 25px rgba(255, 71, 87, 0.4);
+        }
+
+        .bday-btn:active {
+            transform: scale(0.95);
+        }
+
+    /* 🎊 CSS Confetti Animation */
+    .confetti {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background: #f1c40f;
+        opacity: 0.8;
+    }
+
+        .confetti:nth-child(1) {
+            left: 10%;
+            top: -10%;
+            background: #e74c3c;
+            animation: dropConfetti 3s infinite ease-in;
+        }
+
+        .confetti:nth-child(2) {
+            left: 30%;
+            top: -20%;
+            background: #3498db;
+            animation: dropConfetti 4s infinite ease-in 0.5s;
+        }
+
+        .confetti:nth-child(3) {
+            left: 50%;
+            top: -10%;
+            background: #2ecc71;
+            animation: dropConfetti 3.5s infinite ease-in 0.2s;
+        }
+
+        .confetti:nth-child(4) {
+            left: 70%;
+            top: -30%;
+            background: #9b59b6;
+            animation: dropConfetti 4.5s infinite ease-in 0.7s;
+        }
+
+        .confetti:nth-child(5) {
+            left: 85%;
+            top: -15%;
+            background: #e67e22;
+            animation: dropConfetti 3s infinite ease-in 0.4s;
+        }
+
+    /* Animations */
+    @@keyframes blastIn {
+        0%
+
+    {
+        transform: scale(0.3);
+        opacity: 0;
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 1;
+    }
+
+    70% {
+        transform: scale(0.95);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+
+    }
+
+    @@keyframes fadeInOverlay {
+        from
+
+    {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+
+    }
+
+    @@keyframes floatIcon {
+        0%, 100%
+
+    {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    50% {
+        transform: translateY(-15px) rotate(5deg);
+    }
+
+    }
+
+    @@keyframes dropConfetti {
+        0%
+
+    {
+        transform: translateY(0) rotate(0deg);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(400px) rotate(360deg);
+        opacity: 0;
+    }
+
+    }
+
+    .wfh-tracking-notice {
+        background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+        border: 1px solid #6ee7b7;
+        border-left: 4px solid #10b981;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-size: 13px;
+        color: #065f46;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .wfh-tracking-notice .oi { color: #10b981; font-size: 16px; }
+    </style>
+@code {
+    // ==========================================
+    // 🔴 ORIGINAL ATTENDANCE VARIABLES
+    // ==========================================
+    private bool IsLoading = false;
+    private bool IsPunchedIn = false;
+    private bool HasPunchedIn = false;
+    private bool IsWithinRange = false;
+    private double Distance = 0;
+    private bool IsAttendanceCompleted = false;
+    private string EmployeeName = string.Empty;
+    private string Message = "";
+    private string AlertClass = "alert-info";
+
+    private string WorkingHours = "00:00:00";
+    private DateTime? PunchInTime;
+    private System.Timers.Timer _timer;
+    PunchRequestViewModel punchRequestViewModel = new();
+    private string ButtonClass => HasPunchedIn ? "btn-danger" : "btn-success";
+    private string ButtonText => HasPunchedIn ? "PUNCH OUT" : "PUNCH IN";
+    private string IconClass => HasPunchedIn ? "oi-account-logout" : "oi-account-login";
+    private bool ShowConfirmModal = false;
+    private System.Timers.Timer _wfhPingTimer;
+    // ==========================================
+    // 🟢 OUT PASS VARIABLES
+    // ==========================================
+
+    // 💥 NEW: This object holds today's active pass status from DB
+    private TblInOutPass TodayOutPass = new();
+
+    private bool ShowOutPassModal = false;
+    private string EmployeeMobile = "N/A";
+    private string EmployeeId = "N/A";
+    private string EmployeeDepartment = "N/A";
+    private DateTime OutPassDate = DateTime.Now.Date;
+    private string OutPassReason = "";
+    private bool IsSubmittingPass = false;
+
+    private int startSelectedHour = 9;
+    private int startSelectedMinute = 0;
+    private string startSelectedAmPm = "AM";
+
+    private int endSelectedHour = 9;
+    private int endSelectedMinute = 0;
+    private string endSelectedAmPm = "AM";
+
+    private TimeSpan? OutTime;
+    private TimeSpan? InTime;
+    private TimeSpan? ApproxTimeInMinutes;
+
+    // ==========================================
+    // 🔵 RETURN TO OFFICE VARIABLES (NEW)
+    // ==========================================
+    private bool ShowReturnModal = false;
+    private string ReturnLateReason = "";
+    private bool IsSubmittingReturn = false;
+
+    // --- NEW SMART MODE VARIABLES ---
+    private string AllowedMode = ""; // From API: "Office" or "WFH" or null
+    private bool NeedsSelfie = false; // From API
+    private string CapturedSelfie = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _timer = new System.Timers.Timer(1000);
+        _timer.Elapsed += Timer_Tick;
+        await LoadPunchStatus();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                EmployeeName = await JS.InvokeAsync<string>("localStorage.getItem", "empName");
+                if (string.IsNullOrEmpty(EmployeeName)) NavManager.NavigateTo("/", true);
+
+                var dept = await JS.InvokeAsync<string>("localStorage.getItem", "empDept");
+                if (!string.IsNullOrEmpty(dept)) EmployeeDepartment = dept;
+                var empid = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+                if (!string.IsNullOrEmpty(empid)) EmployeeId = empid;
+
+                var mob = await JS.InvokeAsync<string>("localStorage.getItem", "empMobile");
+                if (!string.IsNullOrEmpty(mob)) EmployeeMobile = mob;
+
+                try
+{
+    // if (!string.IsNullOrEmpty(EmployeeDepartment) &&
+    //     EmployeeDepartment.Trim().ToLower() == "hr")
+    // {
+        await JS.InvokeVoidAsync("pushNotifications.subscribe", EmployeeId, EmployeeDepartment);
+    //}
+}
+catch (Exception ex)
+{
+    Console.WriteLine("Push notification setup failed: " + ex.Message);
+}
+                StateHasChanged();
+            }
+            catch { }
+        }
+    }
+
+    private async void Timer_Tick(object sender, System.Timers.ElapsedEventArgs e)
+    {
+        if (HasPunchedIn && PunchInTime.HasValue)
+        {
+            var elapsed = DateTime.Now - PunchInTime.Value;
+            WorkingHours = $"{elapsed.Hours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+        }
+
+        // 🔥 ADD THIS (every 30 sec or conditionally)
+        if (DateTime.Now.Second % 30 == 0)
+        {
+            await LoadTodayOutPass();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandlePunch()
+    {
+        if (AllowedMode == "Office" && !IsWithinRange) return;
+        if (HasPunchedIn) { ShowConfirmModal = true; return; }
+
+        punchRequestViewModel.WorkMode = AllowedMode;
+        await ProcessPunch();
+    }
+    private async Task CaptureAndPunch()
+    {
+        try
+        {
+            CapturedSelfie = await JS.InvokeAsync<string>("capturePhoto");
+            if (string.IsNullOrEmpty(CapturedSelfie)) return;
+
+            punchRequestViewModel.SelfieData = CapturedSelfie;
+            punchRequestViewModel.WorkMode = "Work From Home";
+            await ProcessPunch();
+            // ✅ STOP CAMERA AFTER SUCCESS
+            await JS.InvokeVoidAsync("stopVideo");
+        }
+        catch (Exception ex) { Message = "Camera Error: " + ex.Message; }
+    }
+    private void CloseModal() { ShowConfirmModal = false; }
+    private async Task ConfirmPunchOut() { ShowConfirmModal = false; await ProcessPunch(); }
+
+    private async Task LoadPunchStatus()
+    {
+        try
+        {
+            IsLoading = true;
+            var empIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+            int empId = string.IsNullOrEmpty(empIdStr) ? 1 : int.Parse(empIdStr);
+            // 🎂 1. LocalStorage मधून Birthday घ्या
+            var birtday = await JS.InvokeAsync<string>("localStorage.getItem", "empBirthDay");
+            var location = await JS.InvokeAsync<LocationResultViewModel>("getGeoLocation");
+
+            punchRequestViewModel.EmployeeId = empId;
+            punchRequestViewModel.Lat = location.Latitude;
+            punchRequestViewModel.Lng = location.Longitude;
+            // 🎂 2. आजचा वाढदिवस आहे का ते चेक करा (Frontend Logic)
+            // 🎂 2. आजचा वाढदिवस आहे का ते चेक करा (Frontend Logic)
+            IsBirthday = false;
+            if (!string.IsNullOrEmpty(birtday))
+            {
+                if (DateTime.TryParse(birtday, out DateTime dob))
+                {
+                    if (dob.Month == DateTime.Now.Month && dob.Day == DateTime.Now.Day)
+                    {
+                        IsBirthday = true;
+
+                        // 🔥 जर वाढदिवस असेल आणि अजून Punch-In केले नसेल, तर पॉप-अप दाखवा
+                        if (!HasPunchedIn && !IsAttendanceCompleted)
+                        {
+                            ShowBirthdayModal = true;
+                        }
+                    }
+                }
+            }
+
+            var response = await Http.PostAsJsonAsync("api/attendance/Getpunch-status", punchRequestViewModel);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<PunchStatusResponse>();
+                Distance = result.Distance;
+                IsWithinRange = result.IsWithinRange;
+                AllowedMode = result.AllowedMode; // Important
+                NeedsSelfie = result.NeedsSelfie; // Important
+
+       
+                if (result.Log != null)
+                {
+                    if (result.Log.PunchInTime != null && result.Log.PunchOutTime == null)
+                    {
+
+                        HasPunchedIn = true;
+                        PunchInTime = result.Log.PunchInTime;
+                        await LoadShortBreakStatus(empId);
+                        _timer.Start();
+                        // Resume WFH GPS tracking if still punched in
+                        if (AllowedMode == "Work From Home")
+                        {
+                            try { await JS.InvokeVoidAsync("wfhTracking.startTracking", empId); }
+                            catch (Exception ex) { Console.WriteLine("WFH tracking resume error: " + ex.Message); }
+                        }
+                    }
+                    else if (result.Log.PunchOutTime != null)
+                    {
+                        HasPunchedIn = false;
+                        IsAttendanceCompleted = true;
+                        var total = result.Log.PunchOutTime.Value - result.Log.PunchInTime.Value;
+                        WorkingHours = $"{(int)total.TotalHours:D2}:{total.Minutes:D2}:{total.Seconds:D2}";
+                        StopWfhPingTimer();
+                        try { await JS.InvokeVoidAsync("wfhTracking.stopTracking"); }
+                        catch { }
+                    }
+                }
+
+
+                // 🔥 मुख्य बदल येथे केला आहे 🔥
+                // १. लोडिंग बंद करा म्हणजे UI वर व्हिडिओ टॅग दिसेल
+                IsLoading = false;
+
+                // २. Blazor ला UI रेंडर करायला सांगा
+                StateHasChanged();
+
+                // ३. आता व्हिडिओ टॅग DOM मध्ये आला आहे, त्यामुळे कॅमेरा सुरु करा
+                if (NeedsSelfie && !HasPunchedIn && !IsAttendanceCompleted)
+                {
+                    await Task.Delay(500); // HTML रेंडर होण्यासाठी अर्धा सेकंद थांबा
+                    await JS.InvokeVoidAsync("startVideo");
+                }
+
+                if (!IsWithinRange && AllowedMode != "Work From Home" )
+                {
+                    Message = $"You are {Math.Round(Distance)} meters away.";
+                    AlertClass = "alert-danger";
+                }
+            }
+
+            await LoadTodayOutPass();
+        }
+        catch (Exception ex)
+        {
+            Message = "Error: " + ex.Message;
+            AlertClass = "alert-danger";
+        }
+        finally { IsLoading = false; }
+    }
+
+    private async Task ProcessPunch()
+    {
+        IsPunchedIn = true; IsLoading = true; Message = "";
+        try
+        {
+            var empIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+            int empId = string.IsNullOrEmpty(empIdStr) ? 1 : int.Parse(empIdStr);
+
+           
+
+            // जेव्हा Punch-Out होते तेव्हा:
+           // StopWfhPingTimer();
+            var punchRequest = new PunchRequestViewModel
+            {
+                EmployeeId = empId,
+                Lat = punchRequestViewModel.Lat,
+                Lng = punchRequestViewModel.Lng,
+                WorkMode = AllowedMode,
+                SelfieData = punchRequestViewModel.SelfieData
+            };
+
+            string apiUrl = HasPunchedIn ? "api/attendance/punch-out" : "api/attendance/punch-in";
+            var response = await Http.PostAsJsonAsync(apiUrl, punchRequest);
+
+            if (response.IsSuccessStatusCode)
+            {
+                HasPunchedIn = !HasPunchedIn;
+                if (HasPunchedIn)
+                {
+                    Message = "✅ Punched In Successfully!";
+                    AlertClass = "alert-success";
+                    PunchInTime = DateTime.Now;
+                    WorkingHours = "00:00:00";
+                    _timer.Start();
+                    await JS.InvokeVoidAsync("stopVideo");
+                    // Start WFH GPS tracking after WFH punch-in
+                    if (AllowedMode == "Work From Home")
+                    {
+                        try { await JS.InvokeVoidAsync("wfhTracking.startTracking", empId); }
+                        catch (Exception ex) { Console.WriteLine("WFH tracking start error: " + ex.Message); }
+                    }
+                }
+                else
+                {
+                    Message = $"✅ Punched Out! Total Working Hours: {WorkingHours}";
+                    AlertClass = "alert-success";
+                    HasPunchedIn = false;
+                    IsAttendanceCompleted = true;
+                    _timer.Stop();
+                    StopWfhPingTimer();
+                    try { await JS.InvokeVoidAsync("wfhTracking.stopTracking"); }
+                    catch (Exception ex) { Console.WriteLine("WFH tracking stop error: " + ex.Message); }
+                }
+            }
+            else
+            {
+                Message = await response.Content.ReadAsStringAsync();
+                AlertClass = "alert-danger";
+            }
+        }
+        catch (Exception ex)
+        {
+            Message = "Server error: " + ex.Message;
+            AlertClass = "alert-danger";
+        }
+        finally { IsLoading = false; IsPunchedIn = false; }
+    }
+
+    public void Dispose()
+    {
+        if (_timer != null) { _timer.Stop(); _timer.Dispose(); }
+        if (_wfhPingTimer != null) { _wfhPingTimer.Stop(); _wfhPingTimer.Dispose(); }
+    }
+
+    // ==========================================
+    // 🟢 1. APPLY OUT PASS LOGIC
+    // ==========================================
+
+    private TimeSpan? ConvertDropdownToTimeSpan(int hour, int minute, string amPm)
+    {
+        if (amPm == "PM" && hour != 12) hour += 12;
+        else if (amPm == "AM" && hour == 12) hour = 0;
+        return new TimeSpan(hour, minute, 0);
+    }
+
+    private void CalculateApproxTime()
+    {
+        if (OutTime.HasValue && InTime.HasValue)
+        {
+            var diff = InTime.Value - OutTime.Value;
+            ApproxTimeInMinutes = diff.TotalMinutes >= 0 ? TimeSpan.FromMinutes(diff.TotalMinutes) : TimeSpan.Zero;
+        }
+        else { ApproxTimeInMinutes = null; }
+    }
+
+    private string ApproxTimeString => ApproxTimeInMinutes?.ToString(@"hh\:mm") ?? "00:00";
+
+    private void OnTimeChanged()
+    {
+        var selectedOutTime = ConvertDropdownToTimeSpan(endSelectedHour, endSelectedMinute, endSelectedAmPm);
+        var currentTime = DateTime.Now.TimeOfDay;
+
+        if (selectedOutTime < currentTime && OutPassDate.Date == DateTime.Now.Date)
+        {
+            int hour = DateTime.Now.Hour;
+            endSelectedHour = hour % 12 == 0 ? 12 : hour % 12;
+            endSelectedMinute = DateTime.Now.Minute;
+            endSelectedAmPm = hour >= 12 ? "PM" : "AM";
+            selectedOutTime = ConvertDropdownToTimeSpan(endSelectedHour, endSelectedMinute, endSelectedAmPm);
+        }
+
+        OutTime = selectedOutTime;
+        var selectedInTime = ConvertDropdownToTimeSpan(startSelectedHour, startSelectedMinute, startSelectedAmPm);
+
+        if (selectedInTime < currentTime && OutPassDate.Date == DateTime.Now.Date)
+        {
+            int currentHour = DateTime.Now.Hour;
+            startSelectedHour = currentHour % 12 == 0 ? 12 : currentHour % 12;
+            startSelectedMinute = DateTime.Now.Minute;
+            startSelectedAmPm = currentHour >= 12 ? "PM" : "AM";
+            InTime = currentTime;
+        }
+        else { InTime = selectedInTime; }
+
+        CalculateApproxTime();
+    }
+
+    private void OpenOutPassModal()
+    {
+        OutPassDate = DateTime.Now.Date;
+        var now = DateTime.Now;
+
+        endSelectedHour = now.Hour % 12 == 0 ? 12 : now.Hour % 12;
+        endSelectedMinute = now.Minute;
+        endSelectedAmPm = now.Hour >= 12 ? "PM" : "AM";
+        OutTime = ConvertDropdownToTimeSpan(endSelectedHour, endSelectedMinute, endSelectedAmPm);
+
+        var future = now.AddMinutes(60);
+        startSelectedHour = future.Hour % 12 == 0 ? 12 : future.Hour % 12;
+        startSelectedMinute = future.Minute;
+        startSelectedAmPm = future.Hour >= 12 ? "PM" : "AM";
+        InTime = ConvertDropdownToTimeSpan(startSelectedHour, startSelectedMinute, startSelectedAmPm);
+
+        CalculateApproxTime();
+        OutPassReason = "";
+        ShowOutPassModal = true;
+    }
+
+    private void CloseOutPassModal() { ShowOutPassModal = false; }
+
+    private async Task SubmitOutPass()
+    {
+        if (string.IsNullOrWhiteSpace(OutPassReason))
+        {
+            Message = "Please enter a reason.";
+            AlertClass = "alert-warning";
+            return;
+        }
+
+        OutTime = ConvertDropdownToTimeSpan(endSelectedHour, endSelectedMinute, endSelectedAmPm);
+        InTime = ConvertDropdownToTimeSpan(startSelectedHour, startSelectedMinute, startSelectedAmPm);
+
+        if (InTime <= OutTime)
+        {
+            Message = "In Time must be greater than Out Time.";
+            AlertClass = "alert-warning";
+            return;
+        }
+
+        IsSubmittingPass = true;
+
+        try
+        {
+            var empIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+            int empId = string.IsNullOrEmpty(empIdStr) ? 1 : int.Parse(empIdStr);
+
+            CalculateApproxTime();
+
+            var request = new TblInOutPass   // ✅ MATCH BACKEND MODEL
+            {
+                Empid = empId,
+                Date = OutPassDate,
+                OutTime = OutTime,
+                InTime = InTime,
+                ApproxTime = ApproxTimeInMinutes,
+                Reason = OutPassReason,
+                MobileNo = EmployeeMobile,
+                Designation = EmployeeDepartment,
+                Status = "Pending",
+                IsReturned = false
+            };
+
+            var response = await Http.PostAsJsonAsync("api/InOutPass/Save", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                // ✅ reload from DB (BEST PRACTICE)
+                await LoadTodayOutPass();
+
+                // =========================================================
+                // 🔥 NEW: Outpass Save झाल्यावर लगेच Notification API ला कॉल करा
+                // =========================================================
+                try
+                {
+                    string title = "New Outpass Request";
+                    string body = $"{EmployeeName} has requested an Out/In Pass. Please review.";
+                    string link = "/outpass-request";
+
+                    var notification = new NotificationRequest
+                    {
+                        EmployeeName = EmployeeName,
+                        Title = title,
+                        Body = body,
+                        Link = link
+                    };
+
+                    await Http.PostAsJsonAsync("api/Notifications/sendHRNotification", notification);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Notification send failed: " + ex.Message);
+                }
+                // =========================================================
+                Message = "✅ Out Pass Request sent successfully.";
+                AlertClass = "alert-success";
+                ShowOutPassModal = false;
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Message = $"❌ Failed: {error}";
+                AlertClass = "alert-danger";
+            }
+        }
+        catch (Exception ex)
+        {
+            Message = "Error: " + ex.Message;
+            AlertClass = "alert-danger";
+        }
+        finally
+        {
+            IsSubmittingPass = false;
+        }
+    }
+    private async Task LoadTodayOutPass()
+    {
+        try
+        {
+            var empIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+            int empId = string.IsNullOrEmpty(empIdStr) ? 1 : int.Parse(empIdStr);
+
+            var response = await Http.GetAsync($"api/InOutPass/GetTodayPass/{empId}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<TblInOutPass>();
+
+                TodayOutPass = result ?? new TblInOutPass();
+                // force UI refresh
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch
+        {
+            TodayOutPass = null;
+        }
+    }
+    // ==========================================
+    // 🔵 2. MARK RETURN TO OFFICE LOGIC (NEW)
+    // ==========================================
+
+    private void OpenReturnModal()
+    {
+        ReturnLateReason = "";
+        ShowReturnModal = true;
+    }
+
+    private void CloseReturnModal() { ShowReturnModal = false; }
+
+    private async Task SubmitReturn()
+    {
+        var actualTime = DateTime.Now.TimeOfDay;
+        var expectedInTime = TodayOutPass.InTime.Value;
+        bool isLate = actualTime > expectedInTime;
+
+        if (isLate && string.IsNullOrWhiteSpace(ReturnLateReason))
+        {
+            Message = "You are late. Please provide a reason for the delay.";
+            AlertClass = "alert-warning";
+            return;
+        }
+
+        IsSubmittingReturn = true;
+        try
+        {
+            TimeSpan buffer = isLate ? actualTime - expectedInTime : TimeSpan.Zero;
+            // Updating the object exactly matching your CRM database structure
+            TodayOutPass.IsReturned = true;
+            TodayOutPass.ReturnedTime = actualTime;
+            TodayOutPass.BufferTime = buffer;
+            TodayOutPass.ReturnedTimeReason = isLate ? ReturnLateReason : null;
+            TodayOutPass.Status = isLate ? "Buffer" : "OnTime";
+
+            await Http.PutAsJsonAsync($"api/InOutPass/Update/{TodayOutPass.Id}", TodayOutPass);
+            await Task.Delay(1000); // Simulated delay
+
+            Message = "✅ Successfully marked your return to the office.";
+            AlertClass = "alert-success";
+            ShowReturnModal = false;
+        }
+        catch (Exception ex)
+        {
+            Message = "Error: " + ex.Message;
+            AlertClass = "alert-danger";
+        }
+        finally { IsSubmittingReturn = false; }
+    }
+
+    private void StartWfhPingTimer()
+    {
+        if (_wfhPingTimer == null)
+        {
+            // 300,000 ms म्हणजे 5 मिनिटे (तुम्ही तुमच्या सोयीनुसार वेळ बदलू शकता)
+            _wfhPingTimer = new System.Timers.Timer(100000);
+            _wfhPingTimer.Elapsed += async (s, e) => await PingLocationToServer();
+        }
+        _wfhPingTimer.Start();
+    }
+
+    private void StopWfhPingTimer()
+    {
+        if (_wfhPingTimer != null)
+        {
+            _wfhPingTimer.Stop();
+        }
+    }
+
+    private async Task PingLocationToServer()
+    {
+        try
+        {
+            // फक्त जर Punch-In केले असेल आणि Work From Home असेल तरच लोकेशन पाठवा
+            if (HasPunchedIn && AllowedMode == "Work From Home")
+            {
+                var location = await JS.InvokeAsync<LocationResultViewModel>("getGeoLocation");
+                var empIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+                int empId = string.IsNullOrEmpty(empIdStr) ? 0 : int.Parse(empIdStr);
+
+                var payload = new
+                {
+                    EmployeeId = empId,
+                    CurrentLat = location.Latitude,
+                    CurrentLong = location.Longitude
+                };
+
+                // API ला डेटा पाठवा (API तिथे DB मधील जुन्या Lat/Long सोबत तुलना करेल)
+                await Http.PostAsJsonAsync("api/attendance/CheckWfhBoundary", payload);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Ping Error: " + ex.Message);
+        }
+    }
+    
+    // ==========================================
+    // 🔴 ORIGINAL ATTENDANCE VARIABLES च्या खाली ॲड करा
+    // ==========================================
+    private bool IsBirthday = false; // Birthday चेक करण्यासाठी
+    private bool ShowBirthdayModal = false; // पॉप-अप दाखवण्यासाठी
+
+    private bool IsOnShortBreak = false;
+    private bool ShowMovementModal = false; // पॉप-अप दाखवण्यासाठी
+    private bool ShowMovementReturnModal = false; // पॉप-अप दाखवण्यासाठी
+    private string SelectedMovementReason = "Tea Break"; // Default Reason
+    private int SelectedBreakDuration = 10; // कंपनी पॉलिसीनुसार वेळ (उदा. २० मिनिटे)
+    private string MovementLateReason = ""; // उशिरा येण्याचे कारण
+private DateTime? ExpectedReturnTime; // परत येण्याची अंदाजे वेळ
+    // व्हेरिएबल डिक्लेरेशन
+    private TimeSpan? ShortExitTime;
+    private async Task LoadShortBreakStatus(int empId)
+    {
+        try
+        {
+            var res = await Http.GetAsync($"api/Movement/GetStatus/{empId}");
+            if (res.IsSuccessStatusCode)
+            {
+                var status = await res.Content.ReadFromJsonAsync<MovementStatusResponse>();
+                if (status != null && status.IsOnBreak)
+                {
+                    IsOnShortBreak = true;
+                    ShortExitTime = status.ExitTime;
+                    var savedReturn = await JS.InvokeAsync<string>("localStorage.getItem", "expectedReturn");
+if (!string.IsNullOrEmpty(savedReturn)) ExpectedReturnTime = DateTime.Parse(savedReturn);
+                }
+            }
+        }
+        catch { }
+    }
+    // Models for Movement
+    public class MovementRequest
+    {
+        public int EmpId { get; set; }
+        public string Reason { get; set; }
+    }
+
+    public class MovementStatusResponse
+    {
+        public bool IsOnBreak { get; set; }
+        public TimeSpan? ExitTime { get; set; } // Nullable TimeSpan
+    }
+
+    // १. फक्त पॉप-अप उघडण्यासाठी
+    private void HandleShortExit()
+    {
+        SelectedMovementReason = "Tea Break"; // Reset default
+        ShowMovementModal = true;
+    }
+
+  // १. 'Start Break' बटन दाबल्यावर
+private async Task ConfirmShortExit()
+{
+    try
+    {
+        ShowMovementModal = false;
+        IsLoading = true;
+
+        var empIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+        int empId = int.Parse(empIdStr);
+
+        // अपेक्षित परत येण्याची वेळ सेट करा (लॉजिकसाठी)
+        ExpectedReturnTime = DateTime.Now.AddMinutes(SelectedBreakDuration);
+        // ConfirmShortExit च्या आत शेवटी:
+await JS.InvokeVoidAsync("localStorage.setItem", "expectedReturn", ExpectedReturnTime.Value.ToString("yyyy-MM-dd HH:mm:ss"));
+        var request = new TblMovementRegister
+        {
+            EmpId = empId,
+            Reason = $"{SelectedMovementReason} ({SelectedBreakDuration} Min)"
+        };
+
+        var response = await Http.PostAsJsonAsync("api/Movement/Exit", request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            IsOnShortBreak = true;
+            ShortExitTime = DateTime.Now.TimeOfDay;
+            Message = $"✅ Break Started. Expected return: {ExpectedReturnTime.Value.ToString("hh:mm tt")}";
+            AlertClass = "alert-info";
+        }
+    }
+    catch (Exception ex) { Message = "Error: " + ex.Message; }
+    finally { IsLoading = false; }
+}
+// २. 'Back to Desk' बटन दाबल्यावर
+private async Task HandleShortReturn()
+{
+    // जर कर्मचारी उशिरा आला असेल तर पॉप-अप दाखवा
+    // (टीप: ExpectedReturnTime हा पेज रिफ्रेश केल्यावर उडेल, म्हणून सिस्टिम बॅकएंडला सुद्धा चेक करू शकते)
+    if (ExpectedReturnTime.HasValue && DateTime.Now > ExpectedReturnTime.Value)
+    {
+        MovementLateReason = ""; // रिसेट
+        ShowMovementReturnModal = true; // पॉप-अप दाखवा
+    }
+    else
+    {
+        await ConfirmReturnNow(); // वेळेत असेल तर थेट सेव्ह
+    }
+}
+   // ३. प्रत्यक्ष रिटर्न API कॉल
+private async Task ConfirmReturnNow()
+{
+    try
+    {
+        ShowMovementReturnModal = false;
+        IsLoading = true;
+        var empIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+        int empId = int.Parse(empIdStr);
+
+        var request = new TblMovementRegister { 
+            EmpId = empId,
+            Reason = MovementLateReason // हे आपण बॅकएंडला Concatenate करण्यासाठी पाठवू
+        };
+
+        var response = await Http.PostAsJsonAsync("api/Movement/Return", request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            IsOnShortBreak = false;
+            ExpectedReturnTime = null;
+            Message = "✅ Welcome back! Entry updated.";
+            AlertClass = "alert-success";
+        }
+    }
+    catch (Exception ex) { Message = "Error: " + ex.Message; }
+    finally { IsLoading = false; }
+}
+}

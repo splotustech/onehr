@@ -1,0 +1,608 @@
+﻿@page "/manual-attendance"
+@using Microsoft.AspNetCore.Components.Forms
+@using SMART_HRMS_SYSTEM.Shared.Models
+@using SMART_HRMS_SYSTEM.Shared.ViewModel
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager NavManager
+
+<div class="page-bg">
+    <div class="container-form">
+
+        <!-- HEADER -->
+        <div class="header">
+            <div class="icon">
+                <i class="bi bi-pencil-square"></i>
+            </div>
+            <h2>Manual Attendance Update</h2>
+            <p>Add or Edit missing / incorrect attendance records for employees.</p>
+        </div>
+
+        <!-- CARD -->
+        <div class="card-form">
+            <EditForm Model="this" OnSubmit="SaveManualAttendance">
+                <!-- SECTION 1 -->
+                <div class="section">
+                    <div class="section-header">
+                        <span>01</span> Employee Details
+                    </div>
+                    <div class="grid-2">
+                        <div class="field">
+                            <label>Select Employee *</label>
+                            <select class="input" @bind="SelectedEmployeeId" @bind:event="oninput" @onchange="CheckExistingAttendance">
+                                <option value="0">-- Select Employee --</option>
+                                @foreach (var emp in EmployeeList)
+                                {
+                                    <option value="@emp.Id">@emp.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label>Attendance Date *</label>
+                            <input type="date" class="input" @bind="SelectedDate" @bind:event="oninput" @onchange="CheckExistingAttendance" />
+                            @if (IsLoadingStatus)
+                            {
+                                <small class="text-primary mt-1" style="font-size:12px; font-weight:600;">
+                                    <span class="spinner-border spinner-border-sm me-1" style="width: 10px; height: 10px;"></span> Checking existing record...
+                                </small>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION 2 -->
+                <div class="section">
+                    <div class="section-header">
+                        <span>02</span> Time & Work Mode
+                    </div>
+                    <div class="grid-2">
+                        <!-- Punch In Time -->
+                        <div class="field">
+                            <label>Punch In Time</label>
+                            <div class="custom-time-picker">
+                                <select class="input time-part" @bind="inHour">
+                                    <option value="">HH</option>
+                                    @for (int h = 1; h <= 12; h++)
+                                    {
+                                        <option value="@h">@h.ToString("D2")</option>
+                                    }
+                                </select>
+
+                                <span class="time-colon">:</span>
+
+                                <select class="input time-part" @bind="inMinute">
+                                    <option value="">MM</option>
+                                    @for (int m = 0; m < 60; m++)
+                                    {
+                                        <option value="@m">@m.ToString("D2")</option>
+                                    }
+                                </select>
+
+                                <select class="input time-part am-pm" @bind="inAmPm">
+                                    <option value="">AM/PM</option>
+                                    <option value="AM">AM</option>
+                                    <option value="PM">PM</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Punch Out Time -->
+                        <div class="field">
+                            <label>Punch Out Time</label>
+                            <div class="custom-time-picker">
+                                <select class="input time-part" @bind="outHour">
+                                    <option value="">HH</option>
+                                    @for (int h = 1; h <= 12; h++)
+                                    {
+                                        <option value="@h">@h.ToString("D2")</option>
+                                    }
+                                </select>
+
+                                <span class="time-colon">:</span>
+
+                                <select class="input time-part" @bind="outMinute">
+                                    <option value="">MM</option>
+                                    @for (int m = 0; m < 60; m++)
+                                    {
+                                        <option value="@m">@m.ToString("D2")</option>
+                                    }
+                                </select>
+
+                                <select class="input time-part am-pm" @bind="outAmPm">
+                                    <option value="">AM/PM</option>
+                                    <option value="AM">AM</option>
+                                    <option value="PM">PM</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="field full">
+                            <label>Work Mode *</label>
+                            <select class="input" @bind="WorkMode">
+                                <option value="Office">Office</option>
+                                <option value="Work From Home">Work From Home</option>
+                                <option value="On Field">On Field</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION 3 -->
+                <div class="section">
+                    <div class="section-header">
+                        <span>03</span> Additional Info
+                    </div>
+                    <div class="grid-2">
+                        <div class="field full">
+                            <label>Reason for Manual Update *</label>
+                            <textarea class="input textarea"
+                                      @bind="Reason"
+                                      placeholder="Provide details (e.g., Forgot to punch, System error, etc.)"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ACTIONS -->
+                <div class="actions">
+                    <button type="button" class="btn cancel" @onclick="ResetForm">
+                        Reset
+                    </button>
+                    <button type="submit" class="btn submit" disabled="@IsSubmitting">
+                        @if (IsSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Save Attendance
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Alert -->
+@if (!string.IsNullOrEmpty(ToastMessage))
+{
+    <div class="custom-toast @ToastCssClass">
+        @ToastMessage
+    </div>
+}
+
+<style>
+    /* ===== PAGE ===== */
+    .page-bg {
+        background: #f5f7fb;
+        min-height: 100vh;
+        padding: 50px 15px;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .container-form {
+        max-width: 820px;
+        margin: auto;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .header .icon {
+        width: 48px;
+        height: 48px;
+        background: white;
+        border-radius: 12px;
+        margin: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #4f46e5;
+        font-size: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }
+
+    .header h2 {
+        margin-top: 10px;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .header p {
+        color: #64748b;
+        font-size: 14px;
+    }
+
+    /* ===== CARD ===== */
+    .card-form {
+        background: white;
+        padding: 30px;
+        border-radius: 14px;
+        border: 1px solid #e5e7eb;
+    }
+
+    /* ===== SECTION ===== */
+    .section {
+        margin-bottom: 30px;
+    }
+
+    .section-header {
+        font-weight: 600;
+        margin-bottom: 15px;
+        border-bottom: 1px solid #e5e7eb;
+        padding-bottom: 8px;
+        color: #1e293b;
+    }
+
+    .section-header span {
+        color: #4f46e5;
+        font-weight: 700;
+        margin-right: 8px;
+    }
+
+    /* ===== GRID ===== */
+    .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+    }
+
+    .field {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .field.full {
+        grid-column: span 2;
+    }
+
+    /* ===== INPUT ===== */
+    .input {
+        height: 42px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+        font-size: 14px;
+        background-color: #fff;
+    }
+
+    .textarea {
+        height: 90px;
+        resize: none;
+    }
+
+    /* focus */
+    .input:focus {
+        border-color: #4f46e5;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(79,70,229,0.15);
+    }
+
+    /* ===== LABEL ===== */
+    label {
+        font-size: 13px;
+        margin-bottom: 5px;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    /* ===== CUSTOM TIME PICKER ===== */
+    .custom-time-picker {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .time-part {
+        flex: 1;
+        padding: 8px 5px;
+        text-align: center;
+    }
+    .am-pm {
+        flex: 1.2;
+    }
+    .time-colon {
+        font-weight: bold;
+        color: #64748b;
+    }
+
+    /* ===== BUTTONS ===== */
+    .actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        border-top: 1px solid #e5e7eb;
+        padding-top: 20px;
+    }
+
+    .btn {
+        padding: 8px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .cancel {
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        color: #374151;
+    }
+    .cancel:hover {
+        background: #e5e7eb;
+    }
+
+    .submit {
+        background: #4f46e5;
+        color: white;
+        border: none;
+    }
+    .submit:hover:not(:disabled) {
+        background: #4338ca;
+    }
+
+    /* ===== TOAST ALERTS ===== */
+    .custom-toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        color: white;
+        z-index: 3000;
+        animation: slideUp 0.3s ease;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+
+    .toast-success { background: #10b981; }
+    .toast-error { background: #ef4444; }
+    .toast-warning { background: #f59e0b; color: #fff;}
+
+    @@keyframes slideUp {
+        from { transform: translateY(50px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* ===== MOBILE ===== */
+    @@media(max-width:768px){
+        .grid-2 { grid-template-columns: 1fr; }
+        .field.full { grid-column: span 1; }
+    }
+</style>
+
+@code {
+    private bool IsSubmitting = false;
+    private bool IsLoadingStatus = false;
+    
+    // Toast
+    private string ToastMessage = "";
+    private string ToastCssClass = "";
+
+    // Form Variables
+    private int SelectedEmployeeId = 0;
+    private DateTime SelectedDate = DateTime.Today;
+    
+    // Time Picker Variables (Default: 09:30 AM to 06:30 PM)
+    private int? inHour;
+    private int? inMinute;
+    private string? inAmPm;
+
+    private int? outHour;
+    private int? outMinute;
+    private string? outAmPm;
+    private string EmployeeName =string.Empty;
+
+    private string WorkMode = "Office";
+    private string Reason = "";
+
+    // Employee List
+    private List<EmployeeDropdownModel> EmployeeList = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEmployees();
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                EmployeeName = await JS.InvokeAsync<string>("localStorage.getItem", "empName");
+                if (string.IsNullOrEmpty(EmployeeName)) NavManager.NavigateTo("/", true);
+                StateHasChanged();
+            }
+            catch { }
+        }
+    }
+    private async Task LoadEmployees()
+    {
+        try
+        {
+            EmployeeList = await Http.GetFromJsonAsync<List<EmployeeDropdownModel>>("api/employee/dropdown");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Error loading employees: " + ex.Message);
+        }
+    }
+
+    private async Task CheckExistingAttendance()
+    {
+        if (SelectedEmployeeId == 0) return;
+
+        IsLoadingStatus = true;
+        ClearToast();
+
+        try
+        {
+            var existing = await Http.GetFromJsonAsync<ManualAttendanceModel>(
+                $"api/attendance/GetByDate?empId={SelectedEmployeeId}&date={SelectedDate:yyyy-MM-dd}");
+
+            if (existing != null)
+            {
+                if (existing.PunchInTime != null)
+                    SetTimeDropdowns(existing.PunchInTime.Value.TimeOfDay, true);
+
+                if (existing.PunchOutTime != null)
+                    SetTimeDropdowns(existing.PunchOutTime.Value.TimeOfDay, false);
+
+                WorkMode = existing.WorkMode;
+
+                ShowToast("Record exists for this date. You can edit it.", "toast-warning");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+        finally
+        {
+            IsLoadingStatus = false;
+        }
+    }
+
+    // Convert Dropdown values back to TimeSpan to send to API
+    private TimeSpan ConvertDropdownToTimeSpan(int? hour, int? minute, string? amPm)
+    {
+        int h = hour.Value;
+        int m = minute.Value;
+
+        if (amPm == "PM" && h != 12) h += 12;
+        else if (amPm == "AM" && h == 12) h = 0;
+
+        return new TimeSpan(h, m, 0);
+    }
+    // Convert TimeSpan from Database back to Dropdowns
+    private void SetTimeDropdowns(TimeSpan time, bool isInTime)
+    {
+        int h = time.Hours;
+        string ampm = h >= 12 ? "PM" : "AM";
+        
+        if (h > 12) h -= 12;
+        if (h == 0) h = 12;
+
+        if (isInTime)
+        {
+            inHour = h; inMinute = time.Minutes; inAmPm = ampm;
+        }
+        else
+        {
+            outHour = h; outMinute = time.Minutes; outAmPm = ampm;
+        }
+    }
+
+    private async Task SaveManualAttendance()
+    {
+        if (SelectedEmployeeId == 0)
+        {
+            ShowToast("Please select an employee.", "toast-error");
+            return;
+        }
+
+        bool isInEmpty = inHour == null || inMinute == null || string.IsNullOrEmpty(inAmPm);
+        bool isOutEmpty = outHour == null || outMinute == null || string.IsNullOrEmpty(outAmPm);
+
+        if (isInEmpty && isOutEmpty)
+        {
+            ShowToast("Please select at least one time.", "toast-error");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(Reason))
+        {
+            ShowToast("Reason is mandatory.", "toast-error");
+            return;
+        }
+
+        IsSubmitting = true;
+
+        try
+        {
+            TimeSpan? finalPunchIn = null;
+            TimeSpan? finalPunchOut = null;
+
+            if (!isInEmpty)
+                finalPunchIn = ConvertDropdownToTimeSpan(inHour, inMinute, inAmPm);
+
+            if (!isOutEmpty)
+                finalPunchOut = ConvertDropdownToTimeSpan(outHour, outMinute, outAmPm);
+
+            DateTime? punchIn = finalPunchIn != null ? SelectedDate.Date.Add(finalPunchIn.Value) : null;
+            DateTime? punchOut = finalPunchOut != null ? SelectedDate.Date.Add(finalPunchOut.Value) : null;
+
+            // 🔥 Extra validation
+            if (punchIn != null && punchOut != null && punchOut < punchIn)
+            {
+                ShowToast("Punch Out cannot be before Punch In.", "toast-error");
+                return;
+            }
+
+            var request = new ManualAttendanceModel
+            {
+                EmployeeId = SelectedEmployeeId,
+                AttendanceDate = SelectedDate,
+                PunchInTime = punchIn,
+                PunchOutTime = punchOut,
+                WorkMode = WorkMode,
+                Remarks = Reason
+            };
+
+            var response = await Http.PostAsJsonAsync("api/attendance/manual-entry", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                ShowToast("Attendance updated successfully!", "toast-success");
+                ResetForm();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                ShowToast(error, "toast-error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error: " + ex.Message, "toast-error");
+        }
+        finally
+        {
+            IsSubmitting = false;
+        }
+    }
+    private async void ShowToast(string msg, string css)
+    {
+        ToastMessage = msg;
+        ToastCssClass = css;
+        StateHasChanged();
+        await Task.Delay(4000);
+        ToastMessage = "";
+        StateHasChanged();
+    }
+
+    private void ClearToast() => ToastMessage = "";
+
+    private void ResetForm()
+    {
+        SelectedEmployeeId = 0;
+        SelectedDate = DateTime.Today;
+        inHour = null;
+        inMinute = null;
+        inAmPm = null;
+
+        outHour = null;
+        outMinute = null;
+        outAmPm = null;
+
+        Reason = "";
+        WorkMode = "Office";
+        ClearToast();
+    }
+
+    public class EmployeeDropdownModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+    }
+}

@@ -1,0 +1,44 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install MAUI Android workload
+        run: dotnet workload install android maui-android --skip-sign-check
+
+      - name: Restore
+        run: dotnet restore MauiApp/MauiApp.csproj
+
+      - name: Build Android APK
+        run: |
+          dotnet publish MauiApp/MauiApp.csproj \
+            -f net9.0-android \
+            -c Release \
+            -o ./android-output
+
+      - name: Find APK
+        run: find . -name "*.apk" | head -10
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpOneHR-Android-v${{ github.run_number }}
+          path: |
+            android-output/*.apk
+            MauiApp/bin/Release/net9.0-android/*.apk
+          retention-days: 30

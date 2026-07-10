@@ -1,0 +1,1380 @@
+﻿@page "/outpass-report"
+@using SMART_HRMS_SYSTEM.Shared.ViewModel
+@using SMART_HRMS_SYSTEM.Shared.Models
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager NavManager
+
+<div class="report-wrapper">
+    <div class="report-container">
+
+        <!-- Header -->
+        <div class="report-header">
+            <h2> My In / Out Pass Report</h2>
+            <p>Review outpass Report.</p>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-row mb-4">
+            <div class="stat-card stat-total shadow-sm">
+                <div class="stat-icon"><i class="bi bi-briefcase-fill"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Total Requests</p>
+                    <h3 class="stat-count">@TotalRequests</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-late shadow-sm" style="border-left: 4px solid #f59e0b;">
+                <div class="stat-icon" style="background: #fef3c7; color: #d97706;"><i class="bi bi-clock-fill"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Pending Approvals</p>
+                    <h3 class="stat-count text-warning">@PendingCount</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-present shadow-sm">
+                <div class="stat-icon"><i class="bi bi-check-circle-fill"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Approved</p>
+                    <h3 class="stat-count">@ApprovedCount</h3>
+                </div>
+            </div>
+
+            <div class="stat-card stat-absent shadow-sm">
+                <div class="stat-icon"><i class="bi bi-x-circle-fill"></i></div>
+                <div class="stat-details">
+                    <p class="stat-title">Rejected</p>
+                    <h3 class="stat-count">@RejectedCount</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Card -->
+        <div class="filter-card shadow-sm mb-4">
+            <div class="filter-row">
+
+                <!-- Filter Type Toggle -->
+                <div class="filter-item">
+                    <label class="filter-label">VIEW TYPE</label>
+                    <select class="form-select custom-select" @bind="FilterType" @bind:after="LoadRequests">
+                        <option value="Daily">Daily View</option>
+                        <option value="Monthly">Monthly View</option>
+                    </select>
+                </div>
+
+                @if (FilterType == "Daily")
+                {
+                    <div class="filter-item">
+                        <label class="filter-label">SELECT DATE</label>
+                        <input type="date" class="form-control custom-select"
+                               value="@SelectedDate.ToString("yyyy-MM-dd")"
+                               @onchange="OnDateChanged" />
+                    </div>
+                }
+                else
+                {
+                    <div class="filter-item">
+                        <label class="filter-label">MONTH</label>
+                        <select class="form-select custom-select" @bind="SelectedMonth" @bind:after="LoadRequests">
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <div class="filter-item">
+                        <label class="filter-label">YEAR</label>
+                        <select class="form-select custom-select" @bind="SelectedYear" @bind:after="LoadRequests">
+                            @for (int i = DateTime.Now.Year + 1; i >= 2024; i--)
+                            {
+                                <option value="@i">@i</option>
+                            }
+                        </select>
+                    </div>
+                }
+
+                <!-- Status -->
+                <div class="filter-item">
+                    <label class="filter-label">STATUS</label>
+                    <select class="form-select custom-select" @bind="FilterStatus" @bind:after="LoadRequests">
+                        <option value="All">All Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Rejected">Rejected</option>
+                    </select>
+                </div>
+
+              @*   <!-- Search -->
+                <div class="filter-item search-item">
+                    <label class="filter-label">SEARCH EMPLOYEE</label>
+                    <div class="search-box">
+                        <i class="bi bi-search search-icon"></i>
+                        <input class="form-control custom-select pl-search" style="width:70%"
+                               placeholder="Name..."
+                               value="@SearchText"
+                               @oninput="OnSearchInput" />
+                    </div>
+                </div> *@
+
+                <!-- Reset Button -->
+                <div class="filter-item btn-item">
+                    <label class="filter-label d-none d-md-block">&nbsp;</label>
+                    <button class="btn-search w-100" @onclick="ResetFilters" disabled="@IsLoading">
+                        <i class="bi bi-arrow-repeat d-none d-md-inline me-2"></i> <span>Reset</span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Data Grid -->
+        <div class="report-table-wrapper">
+            @if (IsLoading)
+            {
+                <div class="empty-state shadow-sm">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+                    <h5>Loading Data...</h5>
+                    <p>Fetching outpass requests.</p>
+                </div>
+            }
+            else if (!FilteredRecords.Any())
+            {
+                <div class="empty-state shadow-sm">
+                    <div class="empty-icon placeholder-glow"><i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 2rem;"></i></div>
+                    <h5 class="mt-2">No Requests Found</h5>
+                    <p>No outpass requests match your current filters.</p>
+                </div>
+            }
+            else
+            {
+                <table class="table modern-table">
+                    <thead>
+                        <tr>                          
+                            <th>Date / Times</th>
+                            <th>Reason</th>
+                            <th>Status</th>
+                            <th class="text-center">Action</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var r in FilteredRecords)
+                        {
+                            <tr>
+                                <td data-label="Date & Times">
+                                    <div class="text-value">
+                                        <span class="fw-bold text-dark d-block">
+                                            @(r.Date?.ToString("dd MMM yyyy") ?? "-")
+                                        </span>
+                                        <br />
+                                        <small class="text-muted">
+                                            Out:
+                                            <b class="text-danger">
+                                                @(r.OutTime.HasValue
+                                                                                        ? DateTime.Today.Add(r.OutTime.Value).ToString("hh:mm tt")
+                                                                                        : "-")
+                                                                                          </b>
+                                                                                          |
+                                                                                          In:
+                                                                                          <b class="text-success">
+                                                @(r.InTime.HasValue
+                                                                                        ? DateTime.Today.Add(r.InTime.Value).ToString("hh:mm tt")
+                                                                                        : "-")
+                                    </b>
+                                </small>
+                            </div>
+                        </td>
+
+                                <td data-label="Reason">
+                                    <span class="text-value text-muted" style="max-width: 200px; display: inline-block; white-space: normal;">
+                                        @r.Reason
+                                    </span>
+                                </td>
+
+                                <td data-label="Status">
+                                    <span class="text-value status-badge @GetStatusCss(r.Status)">@r.Status</span>
+                            @if (r.IsReturned == true)
+                                    {
+                                        <hr />
+                                        <span class="text-value status-badge @GetStatusCss(r.Status)">Returned</span>
+
+                                    }
+                                </td>
+
+                                <td data-label="Action" class="text-center">
+                                    <div class="action-buttons text-value justify-content-md-center">
+                                      
+                                        <button class="btn-view" @onclick="() => ShowDetails(r)"><i class="bi bi-info-circle"></i> Details</button>
+                                            <button class="btn-action btn-reject" title="Delete" @onclick="() => PromptReject(r)">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                       
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================== -->
+<!-- 🗑️ DELETE CONFIRM MODAL -->
+<!-- ============================================== -->
+@if (ShowRejectModal && SelectedRequest != null)
+{
+    <div class="modal-overlay" @onclick="CloseModals">
+        <div class="ip-delete-modal animate-pop" @onclick:stopPropagation="true">
+
+            <!-- Icon -->
+            <div class="ip-del-icon-wrap">
+                <div class="ip-del-icon"><i class="bi bi-trash3-fill"></i></div>
+            </div>
+
+            <h5 class="ip-del-title">Delete Request?</h5>
+            <p class="ip-del-sub">This action cannot be undone.</p>
+
+            <!-- Summary Card -->
+            <div class="ip-del-summary">
+                <div class="ip-del-row">
+                    <span class="ip-del-lbl"><i class="bi bi-calendar3"></i> Date</span>
+                    <span class="ip-del-val">@(SelectedRequest.Date?.ToString("dd MMM yyyy") ?? "—")</span>
+                </div>
+                <div class="ip-del-row">
+                    <span class="ip-del-lbl"><i class="bi bi-clock"></i> Time</span>
+                    <span class="ip-del-val">
+                        @(SelectedRequest.OutTime.HasValue ? DateTime.Today.Add(SelectedRequest.OutTime.Value).ToString("hh:mm tt") : "—")
+                        → @(SelectedRequest.InTime.HasValue ? DateTime.Today.Add(SelectedRequest.InTime.Value).ToString("hh:mm tt") : "—")
+                    </span>
+                </div>
+                <div class="ip-del-row">
+                    <span class="ip-del-lbl"><i class="bi bi-chat-left-text"></i> Reason</span>
+                    <span class="ip-del-val ip-del-reason">@(SelectedRequest.Reason?.Length > 40 ? SelectedRequest.Reason.Substring(0, 40) + "..." : SelectedRequest.Reason)</span>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="ip-modal-footer">
+                <button class="ip-btn-cancel" @onclick="CloseModals">Cancel</button>
+                <button class="ip-btn-delete" @onclick="ConfirmDelete" disabled="@IsProcessing">
+                    <i class="bi bi-trash3"></i>
+                    @(IsProcessing ? "Deleting..." : "Yes, Delete")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ============================================== -->
+<!-- 📋 DETAILS MODAL -->
+<!-- ============================================== -->
+@if (ShowDetailsModal && SelectedRequest != null)
+{
+    <div class="modal-overlay" @onclick="CloseModals">
+        <div class="ip-details-modal animate-pop" @onclick:stopPropagation="true">
+
+            <!-- Header -->
+            <div class="ip-det-header">
+                <div class="ip-det-header-icon"><i class="bi bi-card-checklist"></i></div>
+                <div class="ip-det-header-text">
+                    <h5 class="ip-det-title">Pass Details</h5>
+                    <span class="ip-det-sub">@(SelectedRequest.Date?.ToString("dd MMM yyyy, dddd") ?? "—")</span>
+                </div>
+                <button class="ip-det-close" @onclick="CloseModals"><i class="bi bi-x-lg"></i></button>
+            </div>
+
+            <!-- Time Card -->
+            <div class="ip-det-time-card">
+                <div class="ip-det-time-item">
+                    <span class="ip-det-time-lbl">OUT TIME</span>
+                    <span class="ip-det-time-val ip-time-out">
+                        <i class="bi bi-box-arrow-right"></i>
+                        @(SelectedRequest.OutTime.HasValue ? DateTime.Today.Add(SelectedRequest.OutTime.Value).ToString("hh:mm tt") : "—")
+                    </span>
+                </div>
+                <div class="ip-det-time-arrow">
+                    <i class="bi bi-arrow-right-circle-fill"></i>
+                </div>
+                <div class="ip-det-time-item">
+                    <span class="ip-det-time-lbl">IN TIME</span>
+                    <span class="ip-det-time-val ip-time-in">
+                        <i class="bi bi-box-arrow-in-left"></i>
+                        @(SelectedRequest.InTime.HasValue ? DateTime.Today.Add(SelectedRequest.InTime.Value).ToString("hh:mm tt") : "—")
+                    </span>
+                </div>
+                @if (SelectedRequest.ApproxTime.HasValue)
+                {
+                    <div class="ip-det-duration">
+                        <i class="bi bi-hourglass-split"></i>
+                        @($"{(int)SelectedRequest.ApproxTime.Value.TotalHours}h {SelectedRequest.ApproxTime.Value.Minutes}m")
+                    </div>
+                }
+            </div>
+
+            <!-- Info Grid -->
+            <div class="ip-det-body">
+
+                <!-- Reason -->
+                <div class="ip-det-section">
+                    <span class="ip-det-sect-title"><i class="bi bi-justify-left"></i> Reason</span>
+                    <div class="ip-det-sect-body">
+                        @(string.IsNullOrWhiteSpace(SelectedRequest.Reason) ? "No reason provided." : SelectedRequest.Reason)
+                    </div>
+                </div>
+
+                <!-- Status + HR Comment -->
+                <div class="ip-det-status-row">
+                    <div class="ip-det-status-card @GetStatusCardCss(SelectedRequest.Status)">
+                        <span class="ip-det-status-lbl"><i class="bi bi-building"></i> HR Status</span>
+                        <span class="status-badge @GetStatusCss(SelectedRequest.Status)">
+                            @(SelectedRequest.Status ?? "Pending")
+                        </span>
+                        @if (!string.IsNullOrWhiteSpace(SelectedRequest.Comment))
+                        {
+                            <p class="ip-det-comment"><i class="bi bi-chat-dots"></i> @SelectedRequest.Comment</p>
+                        }
+                    </div>
+
+                    <!-- Return Status -->
+                    <div class="ip-det-status-card @(SelectedRequest.IsReturned == true ? "ip-card-green" : "ip-card-gray")">
+                        <span class="ip-det-status-lbl"><i class="bi bi-arrow-return-left"></i> Return</span>
+                        @if (SelectedRequest.IsReturned == true)
+                        {
+                            <span class="status-badge bg-present">Returned</span>
+                            @if (SelectedRequest.ReturnedTime.HasValue)
+                            {
+                                <p class="ip-det-comment">
+                                    <i class="bi bi-clock-history"></i>
+                                    @DateTime.Today.Add(SelectedRequest.ReturnedTime.Value).ToString("hh:mm tt")
+                                </p>
+                            }
+                        }
+                        else
+                        {
+                            <span class="status-badge bg-late">Not Returned</span>
+                        }
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(SelectedRequest.ReturnedTimeReason))
+                {
+                    <div class="ip-det-section">
+                        <span class="ip-det-sect-title"><i class="bi bi-exclamation-circle"></i> Late Return Reason</span>
+                        <div class="ip-det-sect-body ip-late-reason">@SelectedRequest.ReturnedTimeReason</div>
+                    </div>
+                }
+
+                @if (SelectedRequest.CreatedOn.HasValue)
+                {
+                    <div class="ip-det-submitted">
+                        <i class="bi bi-calendar-plus"></i>
+                        Submitted on @SelectedRequest.CreatedOn.Value.ToString("dd MMM yyyy, hh:mm tt")
+                    </div>
+                }
+            </div>
+
+            <!-- Footer -->
+            <div class="ip-det-footer">
+                <button class="ip-btn-close" @onclick="CloseModals">
+                    <i class="bi bi-x-circle"></i> Close
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+<!-- Toast Alert -->
+@if (!string.IsNullOrEmpty(ToastMessage))
+{
+    <div class="custom-toast @ToastCssClass">
+        @ToastMessage
+    </div>
+}
+
+<style>
+    /* ===== GLOBAL (Inherited from your system) ===== */
+    .report-wrapper {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #f3f4f6 0%, #fefefe 100%);
+        padding: 30px 15px;
+        font-family: 'Inter', 'Segoe UI', sans-serif;
+    }
+
+    .btn-view {
+        background: #f1f5f9;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #475569;
+    }
+
+    .report-container {
+        max-width: 1200px;
+        margin: auto;
+    }
+
+    .report-header h2 {
+        font-weight: 800;
+        font-size: 26px;
+        color: #0f172a;
+        margin-bottom: 5px;
+    }
+
+    .report-header p {
+        color: #64748b;
+        font-size: 14px;
+        margin-bottom: 25px;
+    }
+
+    /* ===== STATS ROW ===== */
+    .stats-row {
+        display: flex;
+        gap: 15px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 5px;
+    }
+
+        .stats-row::-webkit-scrollbar {
+            display: none;
+        }
+
+    .stat-card {
+        background: #ffffff;
+        padding: 20px;
+        border-radius: 16px;
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        border: none;
+        flex: 1;
+        min-width: 150px;
+    }
+
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        font-size: 22px;
+        flex-shrink: 0;
+    }
+
+    .stat-total .stat-icon {
+        background: #eff6ff;
+        color: #4f46e5;
+    }
+
+    .stat-present .stat-icon {
+        background: #dcfce7;
+        color: #16a34a;
+    }
+
+    .stat-late .stat-icon {
+        background: #fef3c7;
+        color: #d97706;
+    }
+
+    .stat-absent .stat-icon {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+
+    .stat-title {
+        font-size: 11px;
+        color: #64748b;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin: 0 0 2px 0;
+    }
+
+    .stat-count {
+        font-size: 24px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    /* ===== FILTER CARD (Fixed Overlap Issue) ===== */
+    .filter-card {
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 20px;
+        border: none;
+    }
+
+    .filter-row {
+        display: flex;
+        gap: 15px;
+        align-items: flex-end;
+        flex-wrap: wrap; /* Changed to wrap to prevent squishing */
+    }
+
+    .filter-item {
+        flex: 1;
+        min-width: 150px; /* Minimum width before it wraps */
+    }
+
+    .search-item {
+        flex: 2; /* Make search box slightly larger */
+        min-width: 200px;
+    }
+
+    .btn-item {
+        flex: 0 0 120px; /* Fixed width for button so it never gets crushed */
+    }
+
+    .filter-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .custom-select {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        padding: 10px 9px;
+        font-weight: 500;
+        font-size: 14px;
+        background: #f8fafc;
+        color: #0f172a;
+        transition: all 0.2s ease;
+    }
+
+        .custom-select:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+            background: #fff;
+            outline: none;
+        }
+
+    .btn-search {
+        background: #f8fafc;
+        color: #0f172a;
+        border: 1px solid #e2e8f0;
+        padding: 10px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-search:hover:not(:disabled) {
+            background: #e2e8f0;
+        }
+
+    .search-box {
+        position: relative;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #94a3b8;
+    }
+
+    .pl-search {
+        padding-left: 35px;
+        width: 100%;
+    }
+
+    /* ===== TABLE WRAPPER ===== */
+    .modern-table {
+        width: 100%;
+        background: white;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        margin-bottom: 0;
+    }
+
+        .modern-table thead {
+            background: #f8fafc;
+        }
+
+        .modern-table th {
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            padding: 16px;
+            text-transform: uppercase;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .modern-table td {
+            padding: 16px;
+            font-size: 14px;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            color: #334155;
+        }
+
+        .modern-table tbody tr:hover {
+            background: #f8fafc;
+        }
+
+    /* Table Components */
+    .employee-cell {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #3b82f6);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+
+    .status-badge {
+        padding: 6px 12px;
+        border-radius: 30px;
+        font-size: 12px;
+        font-weight: 700;
+        display: inline-block;
+        text-align: center;
+        min-width: 80px;
+    }
+
+    .bg-present {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .bg-late {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .bg-absent {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .bg-secondary {
+        background: #f1f5f9;
+        color: #64748b;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .btn-action {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        border: none;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: 0.2s;
+        color: white;
+        font-size: 18px; /* Slightly larger icon */
+    }
+
+    .btn-approve {
+        background: #10b981;
+    }
+
+        .btn-approve:hover {
+            background: #059669;
+        }
+
+    .btn-reject {
+        background: #ef4444;
+    }
+
+        .btn-reject:hover {
+            background: #dc2626;
+        }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: white;
+        border-radius: 16px;
+    }
+
+    /* ===== MODALS UI ===== */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(15, 23, 42, 0.65);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+    }
+
+    .confirm-modal {
+        background: #fff;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 350px;
+        padding: 25px 20px;
+        text-align: center;
+        animation: fadeIn 0.3s ease;
+    }
+
+    .modal-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        margin: 0 auto 15px auto;
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 20px;
+    }
+
+    .btn-modal-cancel, .btn-modal-confirm {
+        flex: 1;
+        padding: 12px;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        transition: 0.2s;
+    }
+
+    .btn-modal-cancel {
+        background: #ff4343bf;
+        color: #475569;
+    }
+
+        .btn-modal-cancel:hover {
+            background: #cbd5e1;
+        }
+
+    .btn-modal-confirm {
+        color: white;
+        background-color: #52b67e;
+    }
+
+    /* Toast */
+    .custom-toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        color: white;
+        z-index: 3000;
+        animation: slideUp 0.3s ease;
+    }
+
+    .toast-success {
+        background: #10b981;
+    }
+
+    .toast-error {
+        background: #ef4444;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            transform: translateY(20px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    @@keyframes slideUp {
+        from { transform: translateY(50px); opacity: 0; }
+        to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    /* =============================================
+       🗑️ DELETE MODAL
+    ============================================= */
+    .ip-delete-modal {
+        background: #fff;
+        border-radius: 24px;
+        width: 95%;
+        max-width: 380px;
+        padding: 0 0 24px 0;
+        text-align: center;
+        overflow: hidden;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.2);
+    }
+
+    .animate-pop {
+        animation: ipPop 0.28s cubic-bezier(0.26,0.53,0.74,1.48);
+    }
+
+    @@keyframes ipPop {
+        0%   { opacity:0; transform:scale(0.82); }
+        100% { opacity:1; transform:scale(1); }
+    }
+
+    .ip-del-icon-wrap {
+        background: linear-gradient(135deg,#fee2e2,#fecaca);
+        padding: 30px 0 20px;
+        margin-bottom: 16px;
+    }
+    .ip-del-icon {
+        width: 68px; height: 68px;
+        background: #ef4444;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 30px; color: #fff;
+        margin: 0 auto;
+        box-shadow: 0 8px 20px rgba(239,68,68,0.35);
+    }
+    .ip-del-title { font-size: 20px; font-weight: 800; color: #1e293b; margin: 0 0 4px; }
+    .ip-del-sub   { font-size: 13px; color: #94a3b8; margin: 0 0 18px; }
+
+    .ip-del-summary {
+        background: #f8fafc;
+        border-radius: 14px;
+        margin: 0 20px 20px;
+        padding: 14px;
+        text-align: left;
+        border: 1px solid #f1f5f9;
+    }
+    .ip-del-row {
+        display: flex; justify-content: space-between; align-items: flex-start;
+        gap: 8px; padding: 6px 0;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .ip-del-row:last-child { border-bottom: none; }
+    .ip-del-lbl { font-size: 11px; font-weight: 700; color: #94a3b8; display: flex; align-items: center; gap: 5px; min-width: 70px; }
+    .ip-del-val { font-size: 13px; font-weight: 700; color: #1e293b; text-align: right; }
+    .ip-del-reason { font-weight: 500; color: #475569; }
+
+    .ip-modal-footer { display: flex; gap: 10px; padding: 0 20px; }
+    .ip-btn-cancel {
+        flex: 1; padding: 13px; border-radius: 12px;
+        border: 1.5px solid #e2e8f0; background: #f8fafc;
+        color: #475569; font-size: 14px; font-weight: 700; cursor: pointer;
+    }
+    .ip-btn-cancel:hover { background: #e2e8f0; }
+    .ip-btn-delete {
+        flex: 1; padding: 13px; border-radius: 12px; border: none;
+        background: linear-gradient(135deg,#ef4444,#dc2626);
+        color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 7px;
+        box-shadow: 0 4px 14px rgba(239,68,68,0.4);
+    }
+    .ip-btn-delete:hover:not(:disabled) { opacity:0.9; transform:translateY(-1px); }
+    .ip-btn-delete:disabled { background:#cbd5e1; box-shadow:none; cursor:not-allowed; }
+
+    /* =============================================
+       📋 DETAILS MODAL
+    ============================================= */
+    .ip-details-modal {
+        background: #fff;
+        border-radius: 24px;
+        width: 95%;
+        max-width: 460px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.2);
+        scrollbar-width: thin;
+    }
+
+    /* Header */
+    .ip-det-header {
+        display: flex; align-items: center; gap: 14px;
+        padding: 20px 20px 16px;
+        background: linear-gradient(135deg, #0f172a, #1e3a5f);
+        position: sticky; top: 0; z-index: 1;
+    }
+    .ip-det-header-icon {
+        width: 46px; height: 46px; min-width: 46px;
+        background: rgba(255,255,255,0.15);
+        border-radius: 13px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px; color: #fff;
+    }
+    .ip-det-title { color:#fff; font-size:17px; font-weight:800; margin:0; line-height:1.2; }
+    .ip-det-sub   { color:rgba(255,255,255,0.65); font-size:12px; font-weight:500; }
+    .ip-det-close {
+        margin-left: auto; width:34px; height:34px;
+        border-radius:10px; border:1.5px solid rgba(255,255,255,0.25);
+        background:rgba(255,255,255,0.1); color:#fff;
+        display:flex; align-items:center; justify-content:center;
+        font-size:14px; cursor:pointer; transition:0.2s;
+    }
+    .ip-det-close:hover { background:rgba(255,255,255,0.25); }
+
+    /* Time Card */
+    .ip-det-time-card {
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        background: linear-gradient(135deg,#f0f9ff,#e0f2fe);
+        border-bottom: 1.5px solid #bae6fd;
+        padding: 18px 20px;
+        flex-wrap: wrap;
+    }
+    .ip-det-time-item { display:flex; flex-direction:column; align-items:center; gap:4px; }
+    .ip-det-time-lbl  { font-size:10px; font-weight:700; color:#0369a1; text-transform:uppercase; }
+    .ip-det-time-val  { font-size:18px; font-weight:800; display:flex; align-items:center; gap:6px; }
+    .ip-time-out { color:#dc2626; }
+    .ip-time-in  { color:#16a34a; }
+    .ip-det-time-arrow { font-size:22px; color:#0ea5e9; }
+    .ip-det-duration {
+        background:#0ea5e9; color:#fff;
+        font-size:12px; font-weight:700;
+        padding:5px 14px; border-radius:20px;
+        display:flex; align-items:center; gap:5px;
+    }
+
+    /* Body */
+    .ip-det-body { padding: 16px 20px; display:flex; flex-direction:column; gap:14px; }
+
+    .ip-det-section { display:flex; flex-direction:column; gap:6px; }
+    .ip-det-sect-title {
+        font-size:11px; font-weight:700; color:#94a3b8;
+        text-transform:uppercase; display:flex; align-items:center; gap:6px;
+    }
+    .ip-det-sect-body {
+        background:#f8fafc; border:1px solid #f1f5f9;
+        border-radius:10px; padding:12px 14px;
+        font-size:13.5px; color:#334155; line-height:1.6;
+    }
+    .ip-late-reason { background:#fff7ed; border-color:#fed7aa; color:#92400e; }
+
+    /* Status Row */
+    .ip-det-status-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .ip-det-status-card {
+        border-radius:14px; padding:14px;
+        display:flex; flex-direction:column; gap:7px;
+        border:1.5px solid #f1f5f9; background:#f8fafc;
+    }
+    .ip-card-green { background:#f0fdf4; border-color:#bbf7d0; }
+    .ip-card-gray  { background:#f8fafc; border-color:#e2e8f0; }
+    .ip-card-red   { background:#fff1f2; border-color:#fecdd3; }
+    .ip-det-status-lbl { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; display:flex; align-items:center; gap:5px; }
+    .ip-det-comment { font-size:12px; color:#475569; margin:0; line-height:1.5; background:rgba(255,255,255,0.7); border-radius:8px; padding:6px 10px; }
+
+    /* Submitted row */
+    .ip-det-submitted { font-size:11px; color:#94a3b8; font-weight:600; display:flex; align-items:center; gap:6px; }
+
+    /* Footer */
+    .ip-det-footer {
+        padding:14px 20px; border-top:1px solid #f1f5f9;
+        display:flex; justify-content:center;
+        position:sticky; bottom:0; background:#fff;
+    }
+    .ip-btn-close {
+        padding:11px 40px; border-radius:12px;
+        background:#f1f5f9; border:1.5px solid #e2e8f0;
+        color:#475569; font-weight:700; font-size:14px;
+        display:flex; align-items:center; gap:8px; cursor:pointer;
+    }
+    .ip-btn-close:hover { background:#e2e8f0; color:#1e293b; }
+
+    /* =========================================
+               📱 MOBILE RESPONSIVE
+            ========================================= */
+    @@media (max-width: 992px) {
+        .filter-row {
+            flex-wrap: wrap;
+        }
+
+        .filter-item {
+            flex: 1 1 45%;
+        }
+
+        .btn-item {
+            flex: 1 1 100%;
+            margin-top: 5px;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .report-wrapper {
+            padding: 15px 10px;
+        }
+
+        .filter-row {
+            flex-wrap: wrap;
+        }
+
+        .filter-item {
+            flex: 1 1 100%;
+        }
+
+        .search-item {
+            flex: 1 1 100%;
+        }
+
+        .btn-item {
+            flex: 1 1 100%;
+            margin-top: 5px;
+        }
+
+        .custom-select {
+            padding: 8px 10px;
+            font-size: 13px;
+        }
+
+        .stat-card {
+            padding: 15px 10px;
+            flex-direction: column;
+            text-align: center;
+            gap: 8px;
+        }
+
+        .report-table-wrapper {
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .modern-table thead {
+            display: none;
+        }
+
+        .modern-table, .modern-table tbody, .modern-table tr, .modern-table td {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+            .modern-table tr {
+                margin-bottom: 15px;
+                background: white;
+                padding: 15px;
+                border-radius: 16px;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+                border: 1px solid #e2e8f0;
+            }
+
+            .modern-table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px 0;
+                border: none;
+                font-size: 13px;
+                gap: 15px;
+                text-align: right;
+            }
+
+                .modern-table td::before {
+                    content: attr(data-label);
+                    font-weight: 600;
+                    color: #64748b;
+                    min-width: 100px;
+                    text-transform: uppercase;
+                    font-size: 11px;
+                    text-align: left;
+                }
+        /* Adjustments for Outpass specific cells */
+        .text-value {
+            text-align: right;
+            word-wrap: break-word;
+            white-space: normal;
+            max-width: 65%;
+            display: block;
+        }
+
+        .employee-cell {
+            justify-content: flex-end;
+            text-align: right;
+        }
+
+        .action-buttons {
+            justify-content: flex-end !important;
+            width: 100%;
+        }
+
+        .confirm-modal {
+            padding: 25px 15px;
+        }
+    }
+</style>
+
+@code {
+    private bool IsLoading = false;
+    private bool IsProcessing = false;
+
+    // Filters
+    private string FilterType = "Daily"; // Daily or Monthly
+    private DateTime SelectedDate = DateTime.Today;
+    private int SelectedMonth = DateTime.Today.Month;
+    private int SelectedYear = DateTime.Today.Year;
+    private string FilterStatus = "All";
+    private string SearchText = "";
+
+    // Stats
+    private int TotalRequests, PendingCount, ApprovedCount, RejectedCount;
+
+    // Data - Explicitly initialized with new List<T>()
+    private List<InOutPassViewModel> AllRecords = new List<InOutPassViewModel>();
+    private List<InOutPassViewModel> FilteredRecords = new List<InOutPassViewModel>();
+
+    // Modal Variables
+    private bool ShowApproveModal  = false;
+    private bool ShowRejectModal   = false;
+    private bool ShowDetailsModal  = false;
+    private InOutPassViewModel SelectedRequest = null;
+    private string RejectReason = "";
+
+    // Toast
+    private string ToastMessage = "";
+    private string ToastCssClass = "";
+    private string EmployeeName = string.Empty;
+    private string EmployeeId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRequests();
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                EmployeeName = await JS.InvokeAsync<string>("localStorage.getItem", "empName");
+                if (string.IsNullOrEmpty(EmployeeName))
+                {
+                    NavManager.NavigateTo("/", true);
+                }
+                EmployeeId = await JS.InvokeAsync<string>("localStorage.getItem", "empId");
+                
+                StateHasChanged();
+            }
+            catch
+            {
+            }
+        }
+    }
+    private async Task LoadRequests()
+    {
+        IsLoading = true;
+        try
+        {
+            // Build the URL based on the View Type (Daily or Monthly)
+            string url = $"api/InOutPass/GetPassRequests?filterType={FilterType}";
+
+            if (FilterType == "Daily")
+            {
+                url += $"&date={SelectedDate:yyyy-MM-dd}";
+            }
+            else
+            {
+                url += $"&month={SelectedMonth}&year={SelectedYear}";
+            }
+
+            // Fetch actual data from the database
+            var response = await Http.GetFromJsonAsync<List<InOutPassViewModel>>(url);
+
+            if (response != null)
+            {
+                AllRecords = response.Where(t => t.Empid == Convert.ToInt32(EmployeeId)).ToList();
+            }
+            else
+            {
+                AllRecords = new List<InOutPassViewModel>();
+            }
+
+            // Apply local text-search and status filters
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            ShowToast("Failed to load data from server", "toast-error");
+            AllRecords = new List<InOutPassViewModel>();
+            FilteredRecords = new List<InOutPassViewModel>();
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        var q = AllRecords.Where(t => t.Empid == Convert.ToInt32(EmployeeId)).ToList().AsEnumerable();
+
+        // Local Status Filter
+        if (FilterStatus != "All")
+            q = q.Where(x => x.Status == FilterStatus);
+
+        // Local Search Filter
+        if (!string.IsNullOrWhiteSpace(SearchText))
+            q = q.Where(x => !string.IsNullOrEmpty(x.EmpName) && x.EmpName.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+
+        FilteredRecords = q.ToList();
+
+        // Calculate Stats based on currently fetched records
+        TotalRequests = FilteredRecords.Where(t => t.Empid == Convert.ToInt32(EmployeeId)).Count();
+        PendingCount = FilteredRecords.Where(t => t.Empid == Convert.ToInt32(EmployeeId)).Count(x => x.Status == "Pending");
+        ApprovedCount = FilteredRecords.Where(t => t.Empid == Convert.ToInt32(EmployeeId)).Count(x => x.Status == "Approved");
+        RejectedCount = FilteredRecords.Where(t => t.Empid == Convert.ToInt32(EmployeeId)).Count(x => x.Status == "Rejected");
+        StateHasChanged(); // UI रिफ्रेश करण्यासाठी
+    }
+
+
+
+    private void ResetFilters()
+    {
+        SearchText = "";
+        FilterStatus = "All";
+        FilterType = "Daily";
+        SelectedDate = DateTime.Today;
+        ApplyFilters();
+    }
+
+    // Input Handlers
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        SearchText = e.Value?.ToString() ?? string.Empty;
+        ApplyFilters();
+    }
+
+    private async Task OnDateChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var parsedDate))
+        {
+            SelectedDate = parsedDate;
+            await LoadRequests();
+        }
+    }
+
+    // Modals
+    private void PromptApprove(InOutPassViewModel req)
+    {
+        SelectedRequest = req;
+        ShowApproveModal = true;
+    }
+
+    private void PromptReject(InOutPassViewModel req)
+    {
+        SelectedRequest = req;
+        RejectReason = "";
+        ShowRejectModal = true;
+    }
+
+    private void CloseModals()
+    {
+        ShowApproveModal = false;
+        ShowRejectModal  = false;
+        ShowDetailsModal = false;
+        SelectedRequest  = null;
+    }
+
+    private void ShowDetails(InOutPassViewModel r)
+    {
+        SelectedRequest  = r;
+        ShowDetailsModal = true;
+        ShowRejectModal  = false;
+        ShowApproveModal = false;
+    }
+
+    
+
+    private async Task ConfirmDelete()
+    {
+        
+
+        IsProcessing = true;
+        try
+        {
+            await Http.DeleteAsync($"api/InOutPass/Delete/{SelectedRequest.Id}");
+            await Task.Delay(800); // Simulate API           
+            
+            ShowToast("Request Deleted.", "toast-success");
+            CloseModals();
+            ResetFilters();
+            await LoadRequests();
+        }
+        catch
+        {
+            ShowToast("Error Deleted request.", "toast-error");
+        }
+        IsProcessing = false;
+    }
+
+    // Helpers
+    private async void ShowToast(string msg, string css)
+    {
+        ToastMessage = msg;
+        ToastCssClass = css;
+        StateHasChanged();
+        await Task.Delay(3000);
+        ToastMessage = "";
+        StateHasChanged();
+    }
+
+    private string GetStatusCss(string? status) => status switch
+    {
+        "Approved" => "bg-present",
+        "Pending"  => "bg-late",
+        "Rejected" => "bg-absent",
+        _          => "bg-secondary"
+    };
+
+    private string GetStatusCardCss(string? status) => status switch
+    {
+        "Approved" => "ip-card-green",
+        "Rejected" => "ip-card-red",
+        _          => "ip-card-gray"
+    };
+
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "U";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1) return parts[0].Substring(0, 1).ToUpper();
+        return (parts[0].Substring(0, 1) + parts[1].Substring(0, 1)).ToUpper();
+    }
+}
