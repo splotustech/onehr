@@ -42,16 +42,18 @@ jobs:
             -p:TargetFramework=net9.0-ios
 
       # Build for iOS Simulator (iossimulator-x64) — no Apple code-signing
-      # certificates required, no AOT for ARM64 device target, reliable in CI.
-      # For a real device IPA, set up Apple P12 cert + provisioning profile as
-      # GitHub secrets and change to -r ios-arm64 -p:BuildIpa=true.
+      # certificates required, reliable in CI.
+      # NOTE: use `dotnet build`, NOT `dotnet publish`. The iOS SDK's publish
+      # target only accepts a device architecture (ios-arm64); a simulator RID
+      # cannot be published. For a real device IPA, set up an Apple P12 cert +
+      # provisioning profile as GitHub secrets and switch to:
+      #   dotnet publish -f net9.0-ios -r ios-arm64 -c Release -p:BuildIpa=true
       - name: Build iOS App (Simulator)
         run: |
-          dotnet publish MauiApp/MauiApp.csproj \
+          dotnet build MauiApp/MauiApp.csproj \
             -f net9.0-ios \
             -r iossimulator-x64 \
-            -c Release \
-            -o ./ios-output
+            -c Release
 
       - name: Find App bundle
         run: find . -name "*.app" -type d 2>/dev/null || echo "No .app bundle found"
@@ -61,7 +63,6 @@ jobs:
         with:
           name: SpOneHR-iOS-Simulator-v${{ github.run_number }}
           path: |
-            ios-output/**/*.app
             MauiApp/bin/Release/net9.0-ios/iossimulator-x64/**/*.app
           if-no-files-found: warn
           retention-days: 30
